@@ -1244,11 +1244,11 @@
                 gainNode.connect(context.destination);
                 
                 oscillator.type = 'sine';
-                oscillator.frequency.value = 4000; // 周波数
+                oscillator.frequency.value = 3000; // 周波数
                 gainNode.gain.value = 1; // 音量
                 
                 oscillator.start();
-                oscillator.stop(context.currentTime + 0.06);
+                oscillator.stop(context.currentTime + 0.1);
             }
     </script>
 </body>
