@@ -455,6 +455,11 @@
         // ズームバーの表示とイベント設定
         function initZoomControl() {
             try {
+
+await track.applyConstraints({
+  advanced: [{ zoom: 2.5 }]  // 2.5倍ズーム
+
+                
                 videoTrack = html5QrCode.getRunningTrack();
                 if (videoTrack) {
                     const capabilities = videoTrack.getCapabilities();
