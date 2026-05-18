@@ -49,10 +49,11 @@
             border-radius: 0.75rem;
         }
         
-        /* スキャンゾーンの半透明オーバーレイ */
-        .scan-overlay {
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
-        }
+
+
+
+
+
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 pb-20">
@@ -129,11 +130,9 @@
             <!-- 【改修】バーコードリーダー（スキャン動作時のみ、画面幅いっぱいに表示） -->
             <div id="scanner-wrapper" class="hidden mb-4 bg-gray-900 rounded-xl shadow-inner relative overflow-hidden h-56 flex justify-center items-center w-full">
                 <div id="reader" style="width: 100%; height: 100%;"></div>
-                
-                <!-- スキャンゾーンガイド（バーコード幅に合わせたサイズ） -->
-                <div id="scanner-guide" class="absolute inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden">
-                    <div class="w-4/5 h-1/2 border-2 border-green-500 rounded relative scan-overlay">
-                        <div class="absolute w-full h-[1px] bg-green-500/50 top-1/2 left-0"></div>
+               
+               
+               
                     </div>
                 </div>
             </div>
@@ -404,7 +403,7 @@
             setTimeout(async () => {
                 if (!isScannerActive) return; // スタート前に停止された場合はスキップ
 
-                const config = { fps: 15, qrbox: { width: 225, height: 125 } };
+                const config = { fps: 15, qrbox: { width: 450, height: 250 } };
                 try {
                     await html5QrCode.start(
                         { facingMode: "environment" }, 
