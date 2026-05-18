@@ -445,7 +445,7 @@
                         }
                     );
                     
-                    // スキャナー起動に成功したらズーム設定を初期化する
+                    // スキャナー起動に成功したらズーム設定を初期化する (2.0x自動適用)
                     initZoomControlWithRetry();
 
                 } catch (err) {
@@ -463,13 +463,15 @@
             const slider = document.getElementById('zoom-slider');
             const valueDisplay = document.getElementById('zoom-value');
 
-            // ズーム非対応スマホ(Galaxy A22など)でも強制的にスライダーによる「CSSデジタルズーム(動画拡大)」を効かせるための初期化
             container.classList.remove('hidden');
             slider.min = 1.0;
             slider.max = 3.0; // 最大3倍までCSS拡大
             slider.step = 0.1;
-            slider.value = 2.0;
-            valueDisplay.textContent = "2.0x";
+            
+            // 【改善】初期標準値を「2.0x」に固定してセット
+            const defaultStartZoom = 2.0;
+            slider.value = defaultStartZoom;
+            valueDisplay.textContent = defaultStartZoom.toFixed(1) + "x";
 
             // CSSによる強制ズーム拡大を反映する関数
             const applyCssZoom = (zoomVal) => {
@@ -479,12 +481,15 @@
                 }
             };
 
+            // 起動時にまず2.0倍CSSズームを即座に強制適用
+            applyCssZoom(defaultStartZoom);
+
             // スライダー入力時のロジック (APIズームとCSSデジタルズームのダブル適用)
             slider.oninput = async () => {
                 const zoomVal = parseFloat(slider.value);
                 valueDisplay.textContent = zoomVal.toFixed(1) + "x";
 
-                // 1. まずCSSで画面上の映像を強制拡大(確実にズームして見えるようにするフォールバック)
+                // 1. まずCSSで画面上の映像を強制拡大
                 applyCssZoom(zoomVal);
 
                 // 2. スマホ本体が対応していれば、Camera2 API経由の物理ズームも同期して試行
@@ -496,14 +501,13 @@
                             });
                         }
                     } catch (e) {
-                        // 物理APIズームが動作しない場合(Galaxy A22など)も、CSSズームが効いているためエラーは無視します。
                         console.log("物理APIズーム非対応 (CSSズームで動作中):", e);
                     }
                 }
             };
 
-            // 物理ズームのサポート判定(能力値読み込みポーリング)
-            const checkAndSetupPhysicalZoom = () => {
+            // 物理ズームのサポート判定(能力値読み込みポーリング)とデフォルトの適用
+            const checkAndSetupPhysicalZoom = async () => {
                 if (!isScannerActive) return;
                 try {
                     videoTrack = html5QrCode.getRunningTrack();
@@ -512,17 +516,30 @@
                         // 物理的なデジタルズームを端末が提供している場合
                         if (capabilities && capabilities.zoom) {
                             const minZoom = capabilities.zoom.min || 1;
-                            const maxZoom = capabilities.zoom.max || 10;
+                            const maxZoom = capabilities.zoom.max || 3;
                             const stepZoom = capabilities.zoom.step || 0.1;
                             
                             slider.min = minZoom;
                             slider.max = maxZoom;
                             slider.step = stepZoom;
                             
-                            const settings = videoTrack.getSettings();
-                            slider.value = settings.zoom || 2;
-                            valueDisplay.textContent = parseFloat(slider.value).toFixed(1) + "x";
-                            applyCssZoom(slider.value);
+                            // 物理限界値に2.0が収まっているか安全チェック
+                            const clampedZoom = Math.min(Math.max(defaultStartZoom, minZoom), maxZoom);
+                            slider.value = clampedZoom;
+                            valueDisplay.textContent = clampedZoom.toFixed(1) + "x";
+
+                            // 物理側にも初期値2.0倍の制約を自動で注入
+                            try {
+                                if (typeof videoTrack.applyConstraints === 'function') {
+                                    await videoTrack.applyConstraints({
+                                        advanced: [{ zoom: clampedZoom }]
+                                    });
+                                }
+                            } catch (e) {
+                                console.log("物理起動時初期ズーム適用リトライ失敗:", e);
+                            }
+                            
+                            applyCssZoom(clampedZoom);
                             return; // 物理ズーム情報取得に成功
                         }
                     }
@@ -723,7 +740,7 @@
             if (id === 'edit-modal') {
                 isModalOpen = false;
                 unknownScanCount = 0; 
-                // 編集が終わったら自動でバーコード再起動
+                // 編集が終わったら自動でバーコード再起動 (初期値2.0x自動適用)
                 if (isScannerActive) {
                     await startScanner();
                 }
