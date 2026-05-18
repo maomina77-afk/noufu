@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>レシート集計リーダー (多機能版)</title>
+    <title>レシート集計リーダー (多機能版)ｖ3</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- localForage (内部ストレージ) -->
@@ -133,7 +133,7 @@
                 <div class="w-2/3 bg-gray-900 rounded-xl shadow-inner relative overflow-hidden flex flex-col justify-center items-center">
                     <div id="reader" style="width: 100%; height: 100%; display: none;"></div>
                     
-                    <!-- 【追加】 スキャンゾーンガイド（読み取り位置を明示） -->
+                    <!-- スキャンゾーンガイド（読み取り位置を明示） -->
                     <div id="scanner-guide" class="hidden absolute inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden">
                         <div class="w-3/4 h-1/2 border-2 border-green-500 rounded relative scan-overlay">
                             <div class="absolute w-full h-[1px] bg-green-500/50 top-1/2 left-0"></div>
@@ -286,7 +286,7 @@
                 <h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">📝 手動編集・支払確認</h3>
                 <input type="hidden" id="edit-id">
 
-                <!-- 【追加】 変更前→変更後 を視覚的に示すパネル -->
+                <!-- 変更前→変更後 を視覚的に示すパネル -->
                 <div id="diff-display" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm shadow-sm hidden">
                     <div class="flex justify-between items-center mb-1">
                         <span class="text-gray-600 font-bold">状況</span>
@@ -356,8 +356,6 @@
         // バーコードリーダー管理
         let html5QrCode = null;
         let isScannerActive = false;
-        let lastScannedId = "";
-        let lastScannedTime = 0;
         let unknownScanCount = 0; // 未登録IDの連続スキャン回数
         let isModalOpen = false;  // ポップアップ表示中はスキャンを無視するフラグ
 
@@ -396,8 +394,74 @@
             });
         });
 
-        // --- バーコードリーダー制御 ---
-        document.getElementById('barcode-btn').addEventListener('click', async () => {
+        // --- バーコードスキャナー制御 (アップロードファイルの爆速制御ロジックへ改善) ---
+        async function startScanner() {
+            if (!isScannerActive) return;
+            
+            const readerDiv = document.getElementById('reader');
+            const placeholder = document.getElementById('reader-placeholder');
+            const scannerGuide = document.getElementById('scanner-guide');
+
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("reader");
+            }
+
+            readerDiv.style.display = 'block';
+            scannerGuide.classList.remove('hidden');
+            placeholder.style.display = 'none';
+
+            // アップロードファイル(index.html)と同一の超高速＆感度重視設定
+            const config = { fps: 15, qrbox: { width: 225, height: 125 } };
+            try {
+                await html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config, 
+                    async (decodedText) => {
+                        // スキャン成功時、処理が競合しないよう即カメラを停止 (index.htmlと同一ロジック)
+                        await stopScannerOnly();
+
+                        const p = roster.find(r => String(r["ID"]) === String(decodedText));
+                        if (p) {
+                            unknownScanCount = 0; 
+                            if (navigator.vibrate) navigator.vibrate(50);
+                            
+                            // ポップアップを開く
+                            openEditModal(p["ID"], true);
+                        } else {
+                            unknownScanCount++;
+                            if (unknownScanCount >= 5) {
+                                alert(`未登録のIDです: ${decodedText}\n名簿を確認してください。`);
+                                unknownScanCount = 0;
+                            }
+                            // 未登録時は自動で即再始動してテンポを崩さない
+                            await startScanner();
+                        }
+                    }
+                );
+            } catch (err) {
+                console.error("スキャナー起動に失敗:", err);
+                isScannerActive = false;
+                updateScannerUiState();
+            }
+        }
+
+        async function stopScannerOnly() {
+            if (html5QrCode) {
+                try {
+                    await html5QrCode.stop();
+                } catch (e) {
+                    console.error("スキャナー一時停止時エラー:", e);
+                }
+            }
+        }
+
+        async function deactivateScanner() {
+            isScannerActive = false;
+            await stopScannerOnly();
+            updateScannerUiState();
+        }
+
+        function updateScannerUiState() {
             const btn = document.getElementById('barcode-btn');
             const txt = document.getElementById('barcode-btn-text');
             const readerDiv = document.getElementById('reader');
@@ -405,61 +469,26 @@
             const scannerGuide = document.getElementById('scanner-guide');
 
             if (isScannerActive) {
-                // オフにする
-                if (html5QrCode) {
-                    try { await html5QrCode.stop(); } catch(e) { console.error(e); }
-                }
-                isScannerActive = false;
+                btn.classList.remove('bg-gray-500');
+                btn.classList.add('bg-orange-600');
+                txt.textContent = "停止";
+            } else {
                 btn.classList.remove('bg-orange-600');
                 btn.classList.add('bg-gray-500');
                 txt.textContent = "ＢＣ";
                 readerDiv.style.display = 'none';
                 scannerGuide.classList.add('hidden');
                 placeholder.style.display = 'block';
+            }
+        }
+
+        document.getElementById('barcode-btn').addEventListener('click', async () => {
+            if (isScannerActive) {
+                await deactivateScanner();
             } else {
-                // オンにする
-                if (!html5QrCode) {
-                    html5QrCode = new Html5Qrcode("reader");
-                }
                 isScannerActive = true;
-                btn.classList.remove('bg-gray-500');
-                btn.classList.add('bg-orange-600');
-                txt.textContent = "停止";
-                readerDiv.style.display = 'block';
-                scannerGuide.classList.remove('hidden');
-                placeholder.style.display = 'none';
-
-                const config = { fps: 15, qrbox: { width: 250, height: 100 } };
-                try {
-                    await html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-
-                        const p = roster.find(r => String(r["ID"]) === String(decodedText));
-                        if (p) {
-                            unknownScanCount = 0; // 成功でリセット
-                            lastScannedId = decodedText;
-                            lastScannedTime = now;
-                            if (navigator.vibrate) navigator.vibrate(50);
-                            
-                            // バーコード経由で開くフラグ(true)を渡す
-                            openEditModal(p["ID"], true);
-                        } else {
-                            lastScannedId = decodedText;
-                            lastScannedTime = now;
-                            unknownScanCount++;
-                            // 5回連続で未登録ならアラートを出す
-                            if (unknownScanCount >= 5) {
-                                alert(`未登録のIDです: ${decodedText}\n名簿を確認してください。`);
-                                unknownScanCount = 0; // アラート後にリセット
-                            }
-                        }
-                    });
-                } catch (err) {
-                    console.error("Camera error:", err);
-                    alert("カメラの起動に失敗しました。権限を確認してください。");
-                    isScannerActive = false;
-                    btn.classList.replace('bg-orange-600', 'bg-gray-500');
-                    txt.textContent = "ＢＣ";
-                }
+                updateScannerUiState();
+                await startScanner();
             }
         });
 
@@ -533,7 +562,7 @@
             }
             if(target === 'edit') {
                 document.getElementById('edit-amount').value = amt;
-                updateDiffFromInputs(); // 金額変更時も差分表示を更新
+                updateDiffFromInputs(); 
             }
             if (navigator.vibrate) navigator.vibrate(20);
         };
@@ -596,12 +625,15 @@
             window.scrollTo(0, 0);
         }
         
-        function closeModal(id) { 
+        async function closeModal(id) { 
             document.getElementById(id).classList.add('hidden'); 
-            // 編集モーダルが閉じられたら、スキャンロックを解除
             if (id === 'edit-modal') {
                 isModalOpen = false;
-                unknownScanCount = 0; // ついでにカウンタリセット
+                unknownScanCount = 0; 
+                // モーダルが閉じられた際、バーコードスキャナーがアクティブ状態なら即カメラ再開
+                if (isScannerActive) {
+                    await startScanner();
+                }
             }
         }
 
@@ -843,13 +875,10 @@
         // --- 色判定ロジック ---
         function getStatusColorClass(status) {
             if (status === "済") return "text-green-600 font-bold";
-            // 未、取消、削除などは赤字にする
             return "text-red-600 font-bold";
         }
 
         // --- 手動編集・変更確認機能 ---
-        
-        // fromBarcode が true の場合、自動的に「済」＆プレセット金額が入る
         window.openEditModal = function(id, fromBarcode = false) {
             const person = roster.find(r => String(r.ID) === String(id));
             if(!person) return;
@@ -859,13 +888,11 @@
             document.getElementById('edit-id').value = person.ID;
             document.getElementById('edit-name').value = person["氏名"];
             
-            // 変更前の状態を保持
             const oldStatus = person["支払状況"] || "未";
             const oldAmount = parseInt(person["金額"]) || 0;
             document.getElementById('edit-modal').dataset.oldStatus = oldStatus;
             document.getElementById('edit-modal').dataset.oldAmount = oldAmount;
 
-            // 初期セットする目標値
             let targetStatus = oldStatus;
             let targetAmount = oldAmount;
 
@@ -879,15 +906,12 @@
             document.getElementById('edit-status').value = targetStatus === "済" ? "済" : "";
             document.getElementById('edit-amount').value = targetAmount || "";
 
-            // 変更前後のUIを更新
             updateDiffFromInputs();
 
-            // モーダルと差分表示UIを開く
             document.getElementById('diff-display').classList.remove('hidden');
             document.getElementById('edit-modal').classList.remove('hidden');
         };
 
-        // セレクトや入力が変わった時に「変更前 → 変更後」のUIを更新する
         window.updateDiffFromInputs = function() {
             const oldStatus = document.getElementById('edit-modal').dataset.oldStatus || "未";
             const oldAmount = parseInt(document.getElementById('edit-modal').dataset.oldAmount) || 0;
@@ -907,7 +931,6 @@
             const newAmtSpan = document.getElementById('diff-amount-new');
             newAmtSpan.textContent = `${newAmount.toLocaleString()}円`;
             
-            // 金額が変更されたら色を強調
             if(oldAmount !== newAmount && newStatus === "済") {
                 newAmtSpan.classList.add('text-blue-600');
             } else {
@@ -941,7 +964,7 @@
                 await localforage.setItem('receiptHistoryLog', historyLog);
                 renderRosterTable();
             }
-            closeModal('edit-modal');
+            await closeModal('edit-modal');
         };
 
         window.deleteRosterData = async function() {
@@ -959,7 +982,7 @@
                 await localforage.setItem('receiptRosterData', roster);
                 await localforage.setItem('receiptHistoryLog', historyLog);
                 renderRosterTable();
-                closeModal('edit-modal');
+                await closeModal('edit-modal');
             }
         };
 
@@ -975,7 +998,6 @@
                 document.getElementById(`sort-icon-${k}`).textContent = (sortKey === k) ? (sortDesc ? '▼' : '▲') : '';
             });
 
-            // 検索フィルタリング
             let filteredData = roster.filter(r => {
                 if (!searchQuery) return true;
                 const nameStr = String(r["氏名"] || "").toLowerCase();
@@ -983,7 +1005,6 @@
                 return nameStr.includes(searchQuery) || furiStr.includes(searchQuery);
             });
 
-            // ソート
             filteredData.sort((a, b) => {
                 let valA = a[sortKey === 'status' ? '支払状況' : sortKey === 'kumi' ? '組' : 'ID'];
                 let valB = b[sortKey === 'status' ? '支払状況' : sortKey === 'kumi' ? '組' : 'ID'];
