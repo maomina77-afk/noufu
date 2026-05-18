@@ -29,7 +29,7 @@
         .table-container { overflow-x: auto; }
         th, td { white-space: nowrap; }
         
-        /* 長押しさせる要素のテキスト選択を無効化 */
+        /* 長押しさせる要素 of HTML */
         .long-pressable {
             user-select: none;
             -webkit-user-select: none;
@@ -137,11 +137,11 @@
                     </div>
                 </div>
 
-                <!-- 【追加】ズーム調整スライダー（絶対配置で画面下部に浮かび上がらせます） -->
+                <!-- ズーム調整スライダー（絶対配置で画面下部に浮かび上がらせます） -->
                 <div id="zoom-control-container" class="hidden absolute bottom-3 left-0 right-0 z-20 px-4 py-2 bg-black/75 mx-4 rounded-lg flex items-center gap-3">
                     <span class="text-white text-xs font-bold whitespace-nowrap">🔍 ズーム</span>
                     <input type="range" id="zoom-slider" class="w-full accent-blue-500 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
-                    <span id="zoom-value" class="text-white text-xs font-mono min-w-[2.5rem] text-right font-bold">2.0x</span>
+                    <span id="zoom-value" class="text-white text-xs font-mono min-w-[2.5rem] text-right font-bold">1.0x</span>
                 </div>
             </div>
 
@@ -413,7 +413,8 @@
                     fps: 15, 
                     qrbox: { width: 250, height: 100 },
                     formatsToSupport: [
-                        Html5QrcodeSupportedFormats.CODE_39
+                        Html5QrcodeSupportedFormats.CODE_39,
+                        Html5QrcodeSupportedFormats.QR_CODE
                     ]
                 };
                 try {
@@ -455,11 +456,7 @@
         // ズームバーの表示とイベント設定
         function initZoomControl() {
             try {
-
-await track.applyConstraints({
-  advanced: [{ zoom: 2.5 }]  // 2.5倍ズーム
-
-                
+                // html5QrCode.getRunningTrack() からビデオトラックを取得
                 videoTrack = html5QrCode.getRunningTrack();
                 if (videoTrack) {
                     const capabilities = videoTrack.getCapabilities();
@@ -467,27 +464,59 @@ await track.applyConstraints({
                     const valueDisplay = document.getElementById('zoom-value');
                     const container = document.getElementById('zoom-control-container');
 
-                    // デバイスがズーム（zoom）APIをサポートしている場合
+                    // デバイスがズーム（zoom）APIをサポートしているか検証
                     if (capabilities && capabilities.zoom) {
                         container.classList.remove('hidden');
-                        slider.min = capabilities.zoom.min || 1;
-                        slider.max = capabilities.zoom.max || 3;
-                        slider.step = capabilities.zoom.step || 0.1;
+                        
+                        // システム固有の最小/最大ズーム倍率をセット
+                        const minZoom = capabilities.zoom.min || 1;
+                        const maxZoom = capabilities.zoom.max || 3;
+                        const stepZoom = capabilities.zoom.step || 0.1;
+                        
+                        slider.min = minZoom;
+                        slider.max = maxZoom;
+                        slider.step = stepZoom;
                         
                         const settings = videoTrack.getSettings();
-                        slider.value = settings.zoom || capabilities.zoom.min || 2;
+                        slider.value = settings.zoom || minZoom;
                         valueDisplay.textContent = parseFloat(slider.value).toFixed(1) + "x";
 
                         // スライダーが動いたときにズームを適用
                         slider.oninput = async () => {
                             const zoomVal = parseFloat(slider.value);
                             valueDisplay.textContent = zoomVal.toFixed(1) + "x";
+                            
+                            // MediaStreamTrack.applyConstraints() に対応していない環境や
+                            // 特殊な制約の衝突を防ぐための完全防護ロジック
                             try {
-                                await videoTrack.applyConstraints({
-                                    advanced: [{ zoom: zoomVal }]
-                                });
+                                if (typeof videoTrack.applyConstraints === 'function') {
+                                    await videoTrack.applyConstraints({
+                                        advanced: [{ zoom: zoomVal }]
+                                    });
+                                } else if (typeof videoTrack.setConstraints === 'function') {
+                                    await videoTrack.setConstraints({
+                                        advanced: [{ zoom: zoomVal }]
+                                    });
+                                } else {
+                                    // 最悪の場合のフォールバックとしてhtml5-qrcodeのラップを再帰的に試みる
+                                    if (html5QrCode.applyVideoConstraints) {
+                                        await html5QrCode.applyVideoConstraints({
+                                            advanced: [{ zoom: zoomVal }]
+                                        });
+                                    }
+                                }
                             } catch (e) {
-                                console.error("ズーム適用中にエラーが発生しました:", e);
+                                console.warn("制約の直接適用に失敗しました。代替手段を試行します:", e);
+                                // html5-qrcode のインターフェースを利用したズーム適用
+                                try {
+                                    if (html5QrCode.applyVideoConstraints) {
+                                        await html5QrCode.applyVideoConstraints({
+                                            zoom: zoomVal
+                                        });
+                                    }
+                                } catch (innerErr) {
+                                    console.error("ズーム適用エラー:", innerErr);
+                                }
                             }
                         };
                     } else {
