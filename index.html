@@ -47,6 +47,9 @@
             width: 100% !important;
             height: 100% !important;
             border-radius: 0.75rem;
+            /* スムーズなズーム移行アニメーション */
+            transition: transform 0.15s ease-out; 
+            transform-origin: center center;
         }
         
         /* スキャンゾーンの半透明オーバーレイ */
@@ -137,7 +140,7 @@
                     </div>
                 </div>
 
-                <!-- ズーム調整スライダー（絶対配置で画面下部に浮かび上がらせます） -->
+                <!-- ズーム調整スライダー -->
                 <div id="zoom-control-container" class="hidden absolute bottom-3 left-0 right-0 z-20 px-4 py-2 bg-black/75 mx-4 rounded-lg flex items-center gap-3">
                     <span class="text-white text-xs font-bold whitespace-nowrap">🔍 ズーム</span>
                     <input type="range" id="zoom-slider" class="w-full accent-blue-500 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
@@ -442,8 +445,7 @@
                         }
                     );
                     
-                    // スキャナー起動に成功したら、ブラウザがズーム性能パラメータをトラックに完全割当するまで
-                    // 一定の猶予(最大1秒間)リトライしながら初期化する (Androidブラウザバグ対策)
+                    // スキャナー起動に成功したらズーム設定を初期化する
                     initZoomControlWithRetry();
 
                 } catch (err) {
@@ -454,23 +456,61 @@
             }, 150);
         }
 
-        // ズームバー表示と、Androidブラウザ用のポーリング初期化
+        // ズームバー表示と、Androidブラウザ用リトライ＆CSSデジタルズーム連携
         function initZoomControlWithRetry() {
             let attempt = 0;
-            const checkAndSetup = () => {
+            const container = document.getElementById('zoom-control-container');
+            const slider = document.getElementById('zoom-slider');
+            const valueDisplay = document.getElementById('zoom-value');
+
+            // ズーム非対応スマホ(Galaxy A22など)でも強制的にスライダーによる「CSSデジタルズーム(動画拡大)」を効かせるための初期化
+            container.classList.remove('hidden');
+            slider.min = 1.0;
+            slider.max = 3.0; // 最大3倍までCSS拡大
+            slider.step = 0.1;
+            slider.value = 1.0;
+            valueDisplay.textContent = "1.0x";
+
+            // CSSによる強制ズーム拡大を反映する関数
+            const applyCssZoom = (zoomVal) => {
+                const videoEl = document.querySelector('#reader video');
+                if (videoEl) {
+                    videoEl.style.transform = `scale(${zoomVal})`;
+                }
+            };
+
+            // スライダー入力時のロジック (APIズームとCSSデジタルズームのダブル適用)
+            slider.oninput = async () => {
+                const zoomVal = parseFloat(slider.value);
+                valueDisplay.textContent = zoomVal.toFixed(1) + "x";
+
+                // 1. まずCSSで画面上の映像を強制拡大(確実にズームして見えるようにするフォールバック)
+                applyCssZoom(zoomVal);
+
+                // 2. スマホ本体が対応していれば、Camera2 API経由の物理ズームも同期して試行
+                if (videoTrack) {
+                    try {
+                        if (typeof videoTrack.applyConstraints === 'function') {
+                            await videoTrack.applyConstraints({
+                                advanced: [{ zoom: zoomVal }]
+                            });
+                        }
+                    } catch (e) {
+                        // 物理APIズームが動作しない場合(Galaxy A22など)も、CSSズームが効いているためエラーは無視します。
+                        console.log("物理APIズーム非対応 (CSSズームで動作中):", e);
+                    }
+                }
+            };
+
+            // 物理ズームのサポート判定(能力値読み込みポーリング)
+            const checkAndSetupPhysicalZoom = () => {
                 if (!isScannerActive) return;
                 try {
                     videoTrack = html5QrCode.getRunningTrack();
                     if (videoTrack) {
                         const capabilities = videoTrack.getCapabilities();
-                        const slider = document.getElementById('zoom-slider');
-                        const valueDisplay = document.getElementById('zoom-value');
-                        const container = document.getElementById('zoom-control-container');
-
-                        // ズームパラメータがブラウザ内部のCamera2 API連携から反映された場合
+                        // 物理的なデジタルズームを端末が提供している場合
                         if (capabilities && capabilities.zoom) {
-                            container.classList.remove('hidden');
-                            
                             const minZoom = capabilities.zoom.min || 1;
                             const maxZoom = capabilities.zoom.max || 3;
                             const stepZoom = capabilities.zoom.step || 0.1;
@@ -482,51 +522,21 @@
                             const settings = videoTrack.getSettings();
                             slider.value = settings.zoom || minZoom;
                             valueDisplay.textContent = parseFloat(slider.value).toFixed(1) + "x";
-
-                            // スライダー入力時の超安定化ズーム適用ロジック
-                            slider.oninput = async () => {
-                                const zoomVal = parseFloat(slider.value);
-                                valueDisplay.textContent = zoomVal.toFixed(1) + "x";
-                                
-                                try {
-                                    // 標準的な WebRTC 規格（applyConstraints）を使用
-                                    if (videoTrack && typeof videoTrack.applyConstraints === 'function') {
-                                        await videoTrack.applyConstraints({
-                                            advanced: [{ zoom: zoomVal }]
-                                        });
-                                    }
-                                } catch (e) {
-                                    console.warn("MediaStreamTrackへの直接ズーム適用失敗。代替パスを試行します:", e);
-                                    // html5-qrcode のインターフェースを利用したラッパーフォールバック
-                                    try {
-                                        if (html5QrCode && html5QrCode.applyVideoConstraints) {
-                                            await html5QrCode.applyVideoConstraints({
-                                                zoom: zoomVal
-                                            });
-                                        }
-                                    } catch (innerErr) {
-                                        console.error("すべてのズーム適用に失敗しました:", innerErr);
-                                    }
-                                }
-                            };
-                            return; // 初期化成功
+                            applyCssZoom(slider.value);
+                            return; // 物理ズーム情報取得に成功
                         }
                     }
                 } catch (err) {
-                    console.warn("ズームチェック試行中の例外:", err);
+                    console.warn("ズームチェック例外:", err);
                 }
 
-                // カメラ起動直後はcapabilitiesが空である場合が多いため、時間差で再確認
                 if (attempt < 10) {
                     attempt++;
-                    setTimeout(checkAndSetup, 100); // 100msごとにリトライ (最大1秒)
-                } else {
-                    console.log("この端末・ブラウザ環境はズームに対応していません");
-                    document.getElementById('zoom-control-container').classList.add('hidden');
+                    setTimeout(checkAndSetupPhysicalZoom, 100);
                 }
             };
 
-            checkAndSetup();
+            checkAndSetupPhysicalZoom();
         }
 
         async function stopScannerOnly() {
