@@ -442,8 +442,9 @@
                         }
                     );
                     
-                    // スキャナー起動に成功したらズーム機能を初期化
-                    initZoomControl();
+                    // スキャナー起動に成功したら、ブラウザがズーム性能パラメータをトラックに完全割当するまで
+                    // 一定の猶予(最大1秒間)リトライしながら初期化する (Androidブラウザバグ対策)
+                    initZoomControlWithRetry();
 
                 } catch (err) {
                     console.error("スキャナー起動に失敗:", err);
@@ -453,81 +454,79 @@
             }, 150);
         }
 
-        // ズームバーの表示とイベント設定
-        function initZoomControl() {
-            try {
-                // html5QrCode.getRunningTrack() からビデオトラックを取得
-                videoTrack = html5QrCode.getRunningTrack();
-                if (videoTrack) {
-                    const capabilities = videoTrack.getCapabilities();
-                    const slider = document.getElementById('zoom-slider');
-                    const valueDisplay = document.getElementById('zoom-value');
-                    const container = document.getElementById('zoom-control-container');
+        // ズームバー表示と、Androidブラウザ用のポーリング初期化
+        function initZoomControlWithRetry() {
+            let attempt = 0;
+            const checkAndSetup = () => {
+                if (!isScannerActive) return;
+                try {
+                    videoTrack = html5QrCode.getRunningTrack();
+                    if (videoTrack) {
+                        const capabilities = videoTrack.getCapabilities();
+                        const slider = document.getElementById('zoom-slider');
+                        const valueDisplay = document.getElementById('zoom-value');
+                        const container = document.getElementById('zoom-control-container');
 
-                    // デバイスがズーム（zoom）APIをサポートしているか検証
-                    if (capabilities && capabilities.zoom) {
-                        container.classList.remove('hidden');
-                        
-                        // システム固有の最小/最大ズーム倍率をセット
-                        const minZoom = capabilities.zoom.min || 1;
-                        const maxZoom = capabilities.zoom.max || 3;
-                        const stepZoom = capabilities.zoom.step || 0.1;
-                        
-                        slider.min = minZoom;
-                        slider.max = maxZoom;
-                        slider.step = stepZoom;
-                        
-                        const settings = videoTrack.getSettings();
-                        slider.value = settings.zoom || minZoom;
-                        valueDisplay.textContent = parseFloat(slider.value).toFixed(1) + "x";
-
-                        // スライダーが動いたときにズームを適用
-                        slider.oninput = async () => {
-                            const zoomVal = parseFloat(slider.value);
-                            valueDisplay.textContent = zoomVal.toFixed(1) + "x";
+                        // ズームパラメータがブラウザ内部のCamera2 API連携から反映された場合
+                        if (capabilities && capabilities.zoom) {
+                            container.classList.remove('hidden');
                             
-                            // MediaStreamTrack.applyConstraints() に対応していない環境や
-                            // 特殊な制約の衝突を防ぐための完全防護ロジック
-                            try {
-                                if (typeof videoTrack.applyConstraints === 'function') {
-                                    await videoTrack.applyConstraints({
-                                        advanced: [{ zoom: zoomVal }]
-                                    });
-                                } else if (typeof videoTrack.setConstraints === 'function') {
-                                    await videoTrack.setConstraints({
-                                        advanced: [{ zoom: zoomVal }]
-                                    });
-                                } else {
-                                    // 最悪の場合のフォールバックとしてhtml5-qrcodeのラップを再帰的に試みる
-                                    if (html5QrCode.applyVideoConstraints) {
-                                        await html5QrCode.applyVideoConstraints({
+                            const minZoom = capabilities.zoom.min || 1;
+                            const maxZoom = capabilities.zoom.max || 3;
+                            const stepZoom = capabilities.zoom.step || 0.1;
+                            
+                            slider.min = minZoom;
+                            slider.max = maxZoom;
+                            slider.step = stepZoom;
+                            
+                            const settings = videoTrack.getSettings();
+                            slider.value = settings.zoom || minZoom;
+                            valueDisplay.textContent = parseFloat(slider.value).toFixed(1) + "x";
+
+                            // スライダー入力時の超安定化ズーム適用ロジック
+                            slider.oninput = async () => {
+                                const zoomVal = parseFloat(slider.value);
+                                valueDisplay.textContent = zoomVal.toFixed(1) + "x";
+                                
+                                try {
+                                    // 標準的な WebRTC 規格（applyConstraints）を使用
+                                    if (videoTrack && typeof videoTrack.applyConstraints === 'function') {
+                                        await videoTrack.applyConstraints({
                                             advanced: [{ zoom: zoomVal }]
                                         });
                                     }
-                                }
-                            } catch (e) {
-                                console.warn("制約の直接適用に失敗しました。代替手段を試行します:", e);
-                                // html5-qrcode のインターフェースを利用したズーム適用
-                                try {
-                                    if (html5QrCode.applyVideoConstraints) {
-                                        await html5QrCode.applyVideoConstraints({
-                                            zoom: zoomVal
-                                        });
+                                } catch (e) {
+                                    console.warn("MediaStreamTrackへの直接ズーム適用失敗。代替パスを試行します:", e);
+                                    // html5-qrcode のインターフェースを利用したラッパーフォールバック
+                                    try {
+                                        if (html5QrCode && html5QrCode.applyVideoConstraints) {
+                                            await html5QrCode.applyVideoConstraints({
+                                                zoom: zoomVal
+                                            });
+                                        }
+                                    } catch (innerErr) {
+                                        console.error("すべてのズーム適用に失敗しました:", innerErr);
                                     }
-                                } catch (innerErr) {
-                                    console.error("ズーム適用エラー:", innerErr);
                                 }
-                            }
-                        };
-                    } else {
-                        // 非対応端末ではズームスライダーを隠す
-                        container.classList.add('hidden');
+                            };
+                            return; // 初期化成功
+                        }
                     }
+                } catch (err) {
+                    console.warn("ズームチェック試行中の例外:", err);
                 }
-            } catch (err) {
-                console.warn("ズーム調整機能の初期化に失敗しました (非対応端末/ブラウザ):", err);
-                document.getElementById('zoom-control-container').classList.add('hidden');
-            }
+
+                // カメラ起動直後はcapabilitiesが空である場合が多いため、時間差で再確認
+                if (attempt < 10) {
+                    attempt++;
+                    setTimeout(checkAndSetup, 100); // 100msごとにリトライ (最大1秒)
+                } else {
+                    console.log("この端末・ブラウザ環境はズームに対応していません");
+                    document.getElementById('zoom-control-container').classList.add('hidden');
+                }
+            };
+
+            checkAndSetup();
         }
 
         async function stopScannerOnly() {
