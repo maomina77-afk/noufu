@@ -141,7 +141,7 @@
                 <div id="zoom-control-container" class="hidden absolute bottom-3 left-0 right-0 z-20 px-4 py-2 bg-black/75 mx-4 rounded-lg flex items-center gap-3">
                     <span class="text-white text-xs font-bold whitespace-nowrap">🔍 ズーム</span>
                     <input type="range" id="zoom-slider" class="w-full accent-blue-500 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
-                    <span id="zoom-value" class="text-white text-xs font-mono min-w-[2.5rem] text-right font-bold">1.0x</span>
+                    <span id="zoom-value" class="text-white text-xs font-mono min-w-[2.5rem] text-right font-bold">2.0x</span>
                 </div>
             </div>
 
@@ -467,11 +467,11 @@
                     if (capabilities && capabilities.zoom) {
                         container.classList.remove('hidden');
                         slider.min = capabilities.zoom.min || 1;
-                        slider.max = capabilities.zoom.max || 10;
+                        slider.max = capabilities.zoom.max || 3;
                         slider.step = capabilities.zoom.step || 0.1;
                         
                         const settings = videoTrack.getSettings();
-                        slider.value = settings.zoom || capabilities.zoom.min || 1;
+                        slider.value = settings.zoom || capabilities.zoom.min || 2;
                         valueDisplay.textContent = parseFloat(slider.value).toFixed(1) + "x";
 
                         // スライダーが動いたときにズームを適用
