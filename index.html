@@ -144,7 +144,7 @@
                 <div id="zoom-control-container" class="hidden absolute bottom-3 left-0 right-0 z-20 px-4 py-2 bg-black/75 mx-4 rounded-lg flex items-center gap-3">
                     <span class="text-white text-xs font-bold whitespace-nowrap">🔍 ズーム</span>
                     <input type="range" id="zoom-slider" class="w-full accent-blue-500 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
-                    <span id="zoom-value" class="text-white text-xs font-mono min-w-[2.5rem] text-right font-bold">2.0x</span>
+                    <span id="zoom-value" class="text-white text-xs font-mono min-w-[2.5rem] text-right fpan>ont-bold">3.0x</s
                 </div>
             </div>
 
@@ -469,7 +469,7 @@
             slider.step = 0.1;
             
             // 【改善】初期標準値を「2.0x」に固定してセット
-            const defaultStartZoom = 2.0;
+            const defaultStartZoom = 3.0;
             slider.value = defaultStartZoom;
             valueDisplay.textContent = defaultStartZoom.toFixed(1) + "x";
 
