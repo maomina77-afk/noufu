@@ -432,12 +432,6 @@
                 const config = { fps: 15, qrbox: { width: 250, height: 100 } };
                 try {
                     await html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-                        // モーダル入力中はスキャンを無視する
-                        if (isModalOpen) return;
-
-                        // 連続スキャン防止 (1秒間隔をあける)
-                        const now = Date.now();
-                        if (now - lastScannedTime < 10) return; 
 
                         const p = roster.find(r => String(r["ID"]) === String(decodedText));
                         if (p) {
