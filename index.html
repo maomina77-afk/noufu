@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>レシート集計リーダー (多機能版)ｖ3</title>
+    <title>レシート集計リーダー (多機能版) ｖ4</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- localForage (内部ストレージ) -->
@@ -46,7 +46,7 @@
             object-fit: cover !important;
             width: 100% !important;
             height: 100% !important;
-            border-radius: 0.5rem;
+            border-radius: 0.75rem;
         }
         
         /* スキャンゾーンの半透明オーバーレイ */
@@ -58,7 +58,7 @@
 <body class="bg-gray-100 text-gray-800 pb-20">
 
     <header class="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
-        <h1 class="text-xl font-bold">📊 レシート集計 (多機能版)</h1>
+        <h1 class="text-xl font-bold">📊 集計 (V4)</h1>
         <button id="nav-settings-btn" class="p-2 rounded hover:bg-blue-800 text-sm font-bold">⚙️ 設定/名簿</button>
     </header>
 
@@ -113,35 +113,27 @@
                 <div class="text-center text-[10px] text-blue-500 mt-1">👆長押しで組別集計表を表示👆</div>
             </div>
 
-            <!-- 操作ボタンとバーコードリーダーの縦割りレイアウト -->
-            <div class="flex flex-row gap-3 mb-6 h-36" id="action-buttons">
-                <!-- 左側：縦並びの操作ボタン -->
-                <div class="w-1/3 flex flex-col justify-between gap-2">
-                    <button id="camera-btn" class="bg-indigo-500 text-white font-bold rounded-lg shadow hover:bg-indigo-600 flex-1 flex items-center justify-center text-sm transition-colors">
-                        <span class="mr-1 text-lg">📷</span> OCR
-                    </button>
-                    <button id="file-btn" class="bg-teal-500 text-white font-bold rounded-lg shadow hover:bg-teal-600 flex-1 flex items-center justify-center text-sm transition-colors">
-                        <span class="mr-1 text-lg">🖼️</span> 画面
-                    </button>
-                    <!-- バーコードトグルボタン -->
-                    <button id="barcode-btn" class="bg-gray-500 text-white font-bold rounded-lg shadow flex-1 flex items-center justify-center text-sm transition-colors">
-                        <span class="mr-1 text-lg">📶</span> <span id="barcode-btn-text">ＢＣ</span>
-                    </button>
-                </div>
+            <!-- 【改修】操作ボタン（上に横並び3つ） -->
+            <div class="grid grid-cols-3 gap-2 mb-4" id="action-buttons-container">
+                <button id="camera-btn" class="bg-indigo-500 text-white font-bold py-3 px-1 rounded-lg shadow hover:bg-indigo-600 flex items-center justify-center gap-1 text-sm transition-colors">
+                    <span>📷</span> OCR
+                </button>
+                <button id="file-btn" class="bg-teal-500 text-white font-bold py-3 px-1 rounded-lg shadow hover:bg-teal-600 flex items-center justify-center gap-1 text-sm transition-colors">
+                    <span>🖼️</span> 画面
+                </button>
+                <button id="barcode-btn" class="bg-gray-500 text-white font-bold py-3 px-1 rounded-lg shadow flex items-center justify-center gap-1 text-sm transition-colors">
+                    <span>📶</span> <span id="barcode-btn-text">ＢＣ</span>
+                </button>
+            </div>
 
-                <!-- 右側：バーコードリーダー（常時表示枠） -->
-                <div class="w-2/3 bg-gray-900 rounded-xl shadow-inner relative overflow-hidden flex flex-col justify-center items-center">
-                    <div id="reader" style="width: 100%; height: 100%; display: none;"></div>
-                    
-                    <!-- スキャンゾーンガイド（読み取り位置を明示） -->
-                    <div id="scanner-guide" class="hidden absolute inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden">
-                        <div class="w-3/4 h-1/2 border-2 border-green-500 rounded relative scan-overlay">
-                            <div class="absolute w-full h-[1px] bg-green-500/50 top-1/2 left-0"></div>
-                        </div>
-                    </div>
-
-                    <div id="reader-placeholder" class="text-gray-400 text-xs font-bold text-center p-2 leading-relaxed absolute">
-                        📶 ボタンを押して<br>バーコードリーダーを起動
+            <!-- 【改修】バーコードリーダー（スキャン動作時のみ、画面幅いっぱいに表示） -->
+            <div id="scanner-wrapper" class="hidden mb-4 bg-gray-900 rounded-xl shadow-inner relative overflow-hidden h-56 flex justify-center items-center w-full">
+                <div id="reader" style="width: 100%; height: 100%;"></div>
+                
+                <!-- スキャンゾーンガイド（バーコード幅に合わせたサイズ） -->
+                <div id="scanner-guide" class="absolute inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden">
+                    <div class="w-4/5 h-1/2 border-2 border-green-500 rounded relative scan-overlay">
+                        <div class="absolute w-full h-[1px] bg-green-500/50 top-1/2 left-0"></div>
                     </div>
                 </div>
             </div>
@@ -394,55 +386,57 @@
             });
         });
 
-        // --- バーコードスキャナー制御 (アップロードファイルの爆速制御ロジックへ改善) ---
+        // --- バーコードスキャナー制御 (スキャン作動時のみ画面幅いっぱいに表示) ---
         async function startScanner() {
             if (!isScannerActive) return;
             
-            const readerDiv = document.getElementById('reader');
-            const placeholder = document.getElementById('reader-placeholder');
-            const scannerGuide = document.getElementById('scanner-guide');
+            const wrapper = document.getElementById('scanner-wrapper');
 
+            // 1. スキャナーの表示を有効にし、少しウェイトを置いてカメラを起動(初期化エラー・感度低下防止)
+            wrapper.classList.remove('hidden');
+
+            // カメラ初期化
             if (!html5QrCode) {
                 html5QrCode = new Html5Qrcode("reader");
             }
 
-            readerDiv.style.display = 'block';
-            scannerGuide.classList.remove('hidden');
-            placeholder.style.display = 'none';
+            // わずかな遅延を挟みサイズ決定を待ってからスタート (抜群の感度を発揮するためのハック)
+            setTimeout(async () => {
+                if (!isScannerActive) return; // スタート前に停止された場合はスキップ
 
-            // アップロードファイル(index.html)と同一の超高速＆感度重視設定
-            const config = { fps: 15, qrbox: { width: 225, height: 125 } };
-            try {
-                await html5QrCode.start(
-                    { facingMode: "environment" }, 
-                    config, 
-                    async (decodedText) => {
-                        // スキャン成功時、処理が競合しないよう即カメラを停止 (index.htmlと同一ロジック)
-                        await stopScannerOnly();
+                const config = { fps: 15, qrbox: { width: 225, height: 125 } };
+                try {
+                    await html5QrCode.start(
+                        { facingMode: "environment" }, 
+                        config, 
+                        async (decodedText) => {
+                            // スキャン成功時、処理が競合しないよう即カメラを停止
+                            await stopScannerOnly();
 
-                        const p = roster.find(r => String(r["ID"]) === String(decodedText));
-                        if (p) {
-                            unknownScanCount = 0; 
-                            if (navigator.vibrate) navigator.vibrate(50);
-                            
-                            // ポップアップを開く
-                            openEditModal(p["ID"], true);
-                        } else {
-                            unknownScanCount++;
-                            if (unknownScanCount >= 5) {
-                                alert(`未登録のIDです: ${decodedText}\n名簿を確認してください。`);
-                                unknownScanCount = 0;
+                            const p = roster.find(r => String(r["ID"]) === String(decodedText));
+                            if (p) {
+                                unknownScanCount = 0; 
+                                if (navigator.vibrate) navigator.vibrate(50);
+                                
+                                // ポップアップを開く
+                                openEditModal(p["ID"], true);
+                            } else {
+                                unknownScanCount++;
+                                if (unknownScanCount >= 5) {
+                                    alert(`未登録のIDです: ${decodedText}\n名簿を確認してください。`);
+                                    unknownScanCount = 0;
+                                }
+                                // 未登録時は即スキャナーを再起動して作業を滞らせない
+                                await startScanner();
                             }
-                            // 未登録時は自動で即再始動してテンポを崩さない
-                            await startScanner();
                         }
-                    }
-                );
-            } catch (err) {
-                console.error("スキャナー起動に失敗:", err);
-                isScannerActive = false;
-                updateScannerUiState();
-            }
+                    );
+                } catch (err) {
+                    console.error("スキャナー起動に失敗:", err);
+                    isScannerActive = false;
+                    updateScannerUiState();
+                }
+            }, 150);
         }
 
         async function stopScannerOnly() {
@@ -453,6 +447,8 @@
                     console.error("スキャナー一時停止時エラー:", e);
                 }
             }
+            // スキャナーが停止したら画面から消す
+            document.getElementById('scanner-wrapper').classList.add('hidden');
         }
 
         async function deactivateScanner() {
@@ -464,9 +460,7 @@
         function updateScannerUiState() {
             const btn = document.getElementById('barcode-btn');
             const txt = document.getElementById('barcode-btn-text');
-            const readerDiv = document.getElementById('reader');
-            const placeholder = document.getElementById('reader-placeholder');
-            const scannerGuide = document.getElementById('scanner-guide');
+            const wrapper = document.getElementById('scanner-wrapper');
 
             if (isScannerActive) {
                 btn.classList.remove('bg-gray-500');
@@ -476,9 +470,7 @@
                 btn.classList.remove('bg-orange-600');
                 btn.classList.add('bg-gray-500');
                 txt.textContent = "ＢＣ";
-                readerDiv.style.display = 'none';
-                scannerGuide.classList.add('hidden');
-                placeholder.style.display = 'block';
+                wrapper.classList.add('hidden');
             }
         }
 
@@ -612,7 +604,7 @@
         function showSetupArea() { document.getElementById('setup-area').classList.remove('hidden'); document.getElementById('main-area').classList.add('hidden'); }
         function showMainArea() { document.getElementById('setup-area').classList.add('hidden'); document.getElementById('main-area').classList.remove('hidden'); resetScanFlow(); }
         function resetScanFlow() {
-            document.getElementById('action-buttons').classList.remove('hidden');
+            document.getElementById('action-buttons-container').classList.remove('hidden');
             document.getElementById('preview-area').classList.add('hidden');
             document.getElementById('extraction-area').classList.add('hidden');
             document.getElementById('summary-section').classList.remove('hidden');
@@ -630,7 +622,7 @@
             if (id === 'edit-modal') {
                 isModalOpen = false;
                 unknownScanCount = 0; 
-                // モーダルが閉じられた際、バーコードスキャナーがアクティブ状態なら即カメラ再開
+                // 編集が終わったら自動でバーコード再起動
                 if (isScannerActive) {
                     await startScanner();
                 }
@@ -716,7 +708,7 @@
             try {
                 currentImageBase64 = await compressImage(file, 1200);
                 document.getElementById('preview-img').src = currentImageBase64;
-                document.getElementById('action-buttons').classList.add('hidden');
+                document.getElementById('action-buttons-container').classList.add('hidden');
                 document.getElementById('summary-section').classList.add('hidden');
                 document.getElementById('preview-area').classList.remove('hidden');
             } catch (err) { showError("画像エラー"); resetScanFlow(); } finally { hideLoading(); }
