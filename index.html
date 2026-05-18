@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>レシート集計リーダー (多機能版) ｖ4</title>
+    <title>レシート集計リーダー (多機能版) ｖ5</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- localForage (内部ストレージ) -->
@@ -49,17 +49,16 @@
             border-radius: 0.75rem;
         }
         
-
-
-
-
-
+        /* スキャンゾーンの半透明オーバーレイ */
+        .scan-overlay {
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 pb-20">
 
     <header class="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
-        <h1 class="text-xl font-bold">📊 集計 (V4)</h1>
+        <h1 class="text-xl font-bold">📊 集計 (V5)</h1>
         <button id="nav-settings-btn" class="p-2 rounded hover:bg-blue-800 text-sm font-bold">⚙️ 設定/名簿</button>
     </header>
 
@@ -114,10 +113,7 @@
                 <div class="text-center text-[10px] text-blue-500 mt-1">👆長押しで組別集計表を表示👆</div>
             </div>
 
-                    
-
-
-            <!-- 【改修】操作ボタン（上に横並び3つ） -->
+            <!-- 操作ボタン（上に横並び3つ） -->
             <div class="grid grid-cols-3 gap-2 mb-4" id="action-buttons-container">
                 <button id="camera-btn" class="bg-indigo-500 text-white font-bold py-3 px-1 rounded-lg shadow hover:bg-indigo-600 flex items-center justify-center gap-1 text-sm transition-colors">
                     <span>📷</span> OCR
@@ -129,13 +125,23 @@
                     <span>📶</span> <span id="barcode-btn-text">ＢＣ</span>
                 </button>
             </div>
-    <!-- 【改修】バーコードリーダー（スキャン動作時のみ、画面幅いっぱいに表示） -->
+
+            <!-- バーコードリーダー（スキャン動作時のみ、画面幅いっぱいに表示） -->
             <div id="scanner-wrapper" class="hidden mb-4 bg-gray-900 rounded-xl shadow-inner relative overflow-hidden h-56 flex justify-center items-center w-full">
                 <div id="reader" style="width: 100%; height: 100%;"></div>
-               
-               
-               
+                
+                <!-- スキャンゾーンガイド（バーコード幅に合わせたサイズ） -->
+                <div id="scanner-guide" class="absolute inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden">
+                    <div class="w-4/5 h-1/2 border-2 border-green-500 rounded relative scan-overlay">
+                        <div class="absolute w-full h-[1px] bg-green-500/50 top-1/2 left-0"></div>
                     </div>
+                </div>
+
+                <!-- 【追加】ズーム調整スライダー（絶対配置で画面下部に浮かび上がらせます） -->
+                <div id="zoom-control-container" class="hidden absolute bottom-3 left-0 right-0 z-20 px-4 py-2 bg-black/75 mx-4 rounded-lg flex items-center gap-3">
+                    <span class="text-white text-xs font-bold whitespace-nowrap">🔍 ズーム</span>
+                    <input type="range" id="zoom-slider" class="w-full accent-blue-500 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                    <span id="zoom-value" class="text-white text-xs font-mono min-w-[2.5rem] text-right font-bold">1.0x</span>
                 </div>
             </div>
 
@@ -351,6 +357,7 @@
         let isScannerActive = false;
         let unknownScanCount = 0; // 未登録IDの連続スキャン回数
         let isModalOpen = false;  // ポップアップ表示中はスキャンを無視するフラグ
+        let videoTrack = null;    // 現在動いているビデオトラック（ズーム用）
 
         // --- 初期化 ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -387,47 +394,42 @@
             });
         });
 
-        // --- バーコードスキャナー制御 (スキャン作動時のみ画面幅いっぱいに表示) ---
+        // --- バーコードスキャナー制御 & ズーム制御統合 ---
         async function startScanner() {
             if (!isScannerActive) return;
             
             const wrapper = document.getElementById('scanner-wrapper');
-
-            // 1. スキャナーの表示を有効にし、少しウェイトを置いてカメラを起動(初期化エラー・感度低下防止)
             wrapper.classList.remove('hidden');
 
-            // カメラ初期化
             if (!html5QrCode) {
                 html5QrCode = new Html5Qrcode("reader");
             }
 
-            // わずかな遅延を挟みサイズ決定を待ってからスタート (抜群の感度を発揮するためのハック)
+            // わずかな遅延を挟んで描画が完了してからスキャナーをスタート
             setTimeout(async () => {
-                if (!isScannerActive) return; // スタート前に停止された場合はスキップ
+                if (!isScannerActive) return;
 
-                const config = { fps: 15, qrbox: { width: 250, height: 125 },
-                formatsToSupport: [
-                        // 1次元コード
+                const config = { 
+                    fps: 15, 
+                    qrbox: { width: 250, height: 125 },
+                    formatsToSupport: [
                         Html5QrcodeSupportedFormats.CODE_39,
-                        // 2次元コード
                         Html5QrcodeSupportedFormats.QR_CODE
-                     ]
+                    ]
                 };
                 try {
                     await html5QrCode.start(
                         { facingMode: "environment" }, 
                         config, 
                         async (decodedText) => {
-                            // スキャン成功時、処理が競合しないよう即カメラを停止
+                            // スキャン成功時、即カメラを停止
                             await stopScannerOnly();
 
                             const p = roster.find(r => String(r["ID"]) === String(decodedText));
                             if (p) {
                                 unknownScanCount = 0; 
                                 if (navigator.vibrate) navigator.vibrate(50);
-                // 読み取り音を再生（オプション）
-                playBeepSound();
-                                // ポップアップを開く
+                                playBeepSound();
                                 openEditModal(p["ID"], true);
                             } else {
                                 unknownScanCount++;
@@ -435,17 +437,64 @@
                                     alert(`未登録のIDです: ${decodedText}\n名簿を確認してください。`);
                                     unknownScanCount = 0;
                                 }
-                                // 未登録時は即スキャナーを再起動して作業を滞らせない
                                 await startScanner();
                             }
                         }
                     );
+                    
+                    // スキャナー起動に成功したらズーム機能を初期化
+                    initZoomControl();
+
                 } catch (err) {
                     console.error("スキャナー起動に失敗:", err);
                     isScannerActive = false;
                     updateScannerUiState();
                 }
             }, 150);
+        }
+
+        // ズームバーの表示とイベント設定
+        function initZoomControl() {
+            try {
+                videoTrack = html5QrCode.getRunningTrack();
+                if (videoTrack) {
+                    const capabilities = videoTrack.getCapabilities();
+                    const slider = document.getElementById('zoom-slider');
+                    const valueDisplay = document.getElementById('zoom-value');
+                    const container = document.getElementById('zoom-control-container');
+
+                    // デバイスがズーム（zoom）APIをサポートしている場合
+                    if (capabilities && capabilities.zoom) {
+                        container.classList.remove('hidden');
+                        slider.min = capabilities.zoom.min || 1;
+                        slider.max = capabilities.zoom.max || 10;
+                        slider.step = capabilities.zoom.step || 0.1;
+                        
+                        const settings = videoTrack.getSettings();
+                        slider.value = settings.zoom || capabilities.zoom.min || 1;
+                        valueDisplay.textContent = parseFloat(slider.value).toFixed(1) + "x";
+
+                        // スライダーが動いたときにズームを適用
+                        slider.oninput = async () => {
+                            const zoomVal = parseFloat(slider.value);
+                            valueDisplay.textContent = zoomVal.toFixed(1) + "x";
+                            try {
+                                await videoTrack.applyConstraints({
+                                    advanced: [{ zoom: zoomVal }]
+                                });
+                            } catch (e) {
+                                console.error("ズーム適用中にエラーが発生しました:", e);
+                            }
+                        };
+                    } else {
+                        // 非対応端末ではズームスライダーを隠す
+                        container.classList.add('hidden');
+                    }
+                }
+            } catch (err) {
+                console.warn("ズーム調整機能の初期化に失敗しました (非対応端末/ブラウザ):", err);
+                document.getElementById('zoom-control-container').classList.add('hidden');
+            }
         }
 
         async function stopScannerOnly() {
@@ -456,8 +505,9 @@
                     console.error("スキャナー一時停止時エラー:", e);
                 }
             }
-            // スキャナーが停止したら画面から消す
+            videoTrack = null;
             document.getElementById('scanner-wrapper').classList.add('hidden');
+            document.getElementById('zoom-control-container').classList.add('hidden');
         }
 
         async function deactivateScanner() {
@@ -1236,22 +1286,22 @@
             return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
         
-         // ビープ音を鳴らす関数
-            function playBeepSound() {
-                const context = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = context.createOscillator();
-                const gainNode = context.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(context.destination);
-                
-                oscillator.type = 'sine';
-                oscillator.frequency.value = 3000; // 周波数
-                gainNode.gain.value = 1; // 音量
-                
-                oscillator.start();
-                oscillator.stop(context.currentTime + 0.1);
-            }
+        // ビープ音を鳴らす関数
+        function playBeepSound() {
+            const context = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = context.createOscillator();
+            const gainNode = context.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(context.destination);
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 3000; // 周波数
+            gainNode.gain.value = 1; // 音量
+            
+            oscillator.start();
+            oscillator.stop(context.currentTime + 0.1);
+        }
     </script>
 </body>
 </html>
