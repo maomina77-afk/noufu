@@ -403,7 +403,14 @@
             setTimeout(async () => {
                 if (!isScannerActive) return; // スタート前に停止された場合はスキップ
 
-                const config = { fps: 15, qrbox: { width: 225, height: 125 } };
+                const config = { fps: 15, qrbox: { width: 250, height: 125 } 
+                formatsToSupport: [
+                        // 1次元コード
+                        Html5QrcodeSupportedFormats.CODE_39,
+                        // 2次元コード
+                        Html5QrcodeSupportedFormats.QR_CODE
+                     ]
+                };
                 try {
                     await html5QrCode.start(
                         { facingMode: "environment" }, 
@@ -416,7 +423,8 @@
                             if (p) {
                                 unknownScanCount = 0; 
                                 if (navigator.vibrate) navigator.vibrate(50);
-                                
+                // 読み取り音を再生（オプション）
+                playBeepSound();
                                 // ポップアップを開く
                                 openEditModal(p["ID"], true);
                             } else {
@@ -1225,6 +1233,23 @@
             if (!str) return '';
             return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
+        
+         // ビープ音を鳴らす関数
+            function playBeepSound() {
+                const context = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = context.createOscillator();
+                const gainNode = context.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(context.destination);
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.value = 1000; // 周波数
+                gainNode.gain.value = 0.1; // 音量
+                
+                oscillator.start();
+                oscillator.stop(context.currentTime + 0.1);
+            }
     </script>
 </body>
 </html>
