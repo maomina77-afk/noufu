@@ -436,8 +436,8 @@
                         if (isModalOpen) return;
 
                         // 連続スキャン防止 (1秒間隔をあける)
-                        // const now = Date.now();
-                        // if (now - lastScannedTime < 1000) return; 
+                        const now = Date.now();
+                        if (now - lastScannedTime < 1) return; 
 
                         const p = roster.find(r => String(r["ID"]) === String(decodedText));
                         if (p) {
