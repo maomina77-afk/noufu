@@ -336,7 +336,7 @@
         let historyLog = [];  // 変更履歴データ
         let scanData = [];    // スキャン画像とテキスト
         
-        let presetAmounts = [1000, 2000, 3000, 5000, 10000];
+        let presetAmounts = [10000];
         let currentShareText = ""; 
         
         // ソート・検索管理
@@ -403,7 +403,7 @@
             setTimeout(async () => {
                 if (!isScannerActive) return; // スタート前に停止された場合はスキップ
 
-                const config = { fps: 15, qrbox: { width: 450, height: 250 } };
+                const config = { fps: 15, qrbox: { width: 225, height: 125 } };
                 try {
                     await html5QrCode.start(
                         { facingMode: "environment" }, 
