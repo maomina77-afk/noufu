@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>レシート集計リーダー (多機能版)Ver.2</title>
+    <title>レシート集計リーダー (多機能版)</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- localForage (内部ストレージ) -->
@@ -58,7 +58,7 @@
 <body class="bg-gray-100 text-gray-800 pb-20">
 
     <header class="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
-        <h1 class="text-xl font-bold">📊 納付状況集計</h1>
+        <h1 class="text-xl font-bold">📊 レシート集計 (多機能版)</h1>
         <button id="nav-settings-btn" class="p-2 rounded hover:bg-blue-800 text-sm font-bold">⚙️ 設定/名簿</button>
     </header>
 
@@ -110,7 +110,7 @@
                         <span id="stats-amount" class="text-xl font-bold text-blue-700">0 円</span>
                     </div>
                 </div>
-                <div class="text-center text-[10px] text-blue-500 mt-1">👆長押しで集計表を表示👆</div>
+                <div class="text-center text-[10px] text-blue-500 mt-1">👆長押しで組別集計表を表示👆</div>
             </div>
 
             <!-- 操作ボタンとバーコードリーダーの縦割りレイアウト -->
@@ -345,7 +345,7 @@
         let historyLog = [];  // 変更履歴データ
         let scanData = [];    // スキャン画像とテキスト
         
-        let presetAmounts = [10000];
+        let presetAmounts = [1000, 2000, 3000, 5000, 10000];
         let currentShareText = ""; 
         
         // ソート・検索管理
@@ -436,8 +436,8 @@
                         if (isModalOpen) return;
 
                         // 連続スキャン防止 (1秒間隔をあける)
-                        const now = Date.now();
-                        if (now - lastScannedTime < 1000) return; 
+                        // const now = Date.now();
+                        // if (now - lastScannedTime < 1000) return; 
 
                         const p = roster.find(r => String(r["ID"]) === String(decodedText));
                         if (p) {
