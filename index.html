@@ -512,7 +512,7 @@
                         // 物理的なデジタルズームを端末が提供している場合
                         if (capabilities && capabilities.zoom) {
                             const minZoom = capabilities.zoom.min || 1;
-                            const maxZoom = capabilities.zoom.max || 3;
+                            const maxZoom = capabilities.zoom.max || 10;
                             const stepZoom = capabilities.zoom.step || 0.1;
                             
                             slider.min = minZoom;
@@ -520,7 +520,7 @@
                             slider.step = stepZoom;
                             
                             const settings = videoTrack.getSettings();
-                            slider.value = settings.zoom || minZoom;
+                            slider.value = settings.zoom || 2;
                             valueDisplay.textContent = parseFloat(slider.value).toFixed(1) + "x";
                             applyCssZoom(slider.value);
                             return; // 物理ズーム情報取得に成功
