@@ -48,12 +48,17 @@
             height: 100% !important;
             border-radius: 0.5rem;
         }
+        
+        /* スキャンゾーンの半透明オーバーレイ */
+        .scan-overlay {
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+        }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 pb-20">
 
     <header class="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
-        <h1 class="text-xl font-bold">📊 レシート集計</h1>
+        <h1 class="text-xl font-bold">📊 レシート集計 (多機能版)</h1>
         <button id="nav-settings-btn" class="p-2 rounded hover:bg-blue-800 text-sm font-bold">⚙️ 設定/名簿</button>
     </header>
 
@@ -108,7 +113,7 @@
                 <div class="text-center text-[10px] text-blue-500 mt-1">👆長押しで組別集計表を表示👆</div>
             </div>
 
-            <!-- 【改修】操作ボタンとバーコードリーダーの縦割りレイアウト -->
+            <!-- 操作ボタンとバーコードリーダーの縦割りレイアウト -->
             <div class="flex flex-row gap-3 mb-6 h-36" id="action-buttons">
                 <!-- 左側：縦並びの操作ボタン -->
                 <div class="w-1/3 flex flex-col justify-between gap-2">
@@ -127,7 +132,15 @@
                 <!-- 右側：バーコードリーダー（常時表示枠） -->
                 <div class="w-2/3 bg-gray-900 rounded-xl shadow-inner relative overflow-hidden flex flex-col justify-center items-center">
                     <div id="reader" style="width: 100%; height: 100%; display: none;"></div>
-                    <div id="reader-placeholder" class="text-gray-400 text-xs font-bold text-center p-2 leading-relaxed">
+                    
+                    <!-- 【追加】 スキャンゾーンガイド（読み取り位置を明示） -->
+                    <div id="scanner-guide" class="hidden absolute inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden">
+                        <div class="w-3/4 h-1/2 border-2 border-green-500 rounded relative scan-overlay">
+                            <div class="absolute w-full h-[1px] bg-green-500/50 top-1/2 left-0"></div>
+                        </div>
+                    </div>
+
+                    <div id="reader-placeholder" class="text-gray-400 text-xs font-bold text-center p-2 leading-relaxed absolute">
                         📶 ボタンを押して<br>バーコードリーダーを起動
                     </div>
                 </div>
@@ -196,7 +209,7 @@
                     </div>
                 </div>
                 
-                <!-- 【追加】氏名検索ボックス -->
+                <!-- 氏名検索ボックス -->
                 <div id="search-container" class="hidden mb-3 mt-1 px-1">
                     <input type="text" id="search-name-input" placeholder="氏名またはフリガナで検索..." class="w-full border-2 border-blue-400 p-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-600 outline-none shadow-sm">
                 </div>
@@ -208,7 +221,6 @@
                                 <tr>
                                     <th class="p-2 cursor-pointer hover:bg-gray-200 text-blue-700 underline" onclick="toggleSort('id')">ID <span id="sort-icon-id"></span></th>
                                     <th class="p-2 cursor-pointer hover:bg-gray-200 text-blue-700 underline text-center" onclick="toggleSort('kumi')">組 <span id="sort-icon-kumi"></span></th>
-                                    <!-- 【変更】氏名ヘッダーを押すと検索窓トグル -->
                                     <th class="p-2 cursor-pointer hover:bg-gray-200 text-blue-700 underline" onclick="toggleSearch()">氏名 🔍</th>
                                     <th class="p-2 cursor-pointer hover:bg-gray-200 text-blue-700 underline text-center" onclick="toggleSort('status')">状況 <span id="sort-icon-status"></span></th>
                                     <th class="p-2 text-right">金額</th>
@@ -268,19 +280,31 @@
             </div>
         </div>
 
-        <!-- 4. 手動編集モーダル (氏名編集・削除機能つき) -->
+        <!-- 4. 手動編集モーダル (状況変化・氏名編集・削除つき) -->
         <div id="edit-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
             <div class="bg-white rounded-xl shadow-lg w-full max-w-sm p-5">
                 <h3 class="font-bold text-lg mb-4 border-b pb-2 text-gray-700">📝 手動編集・支払確認</h3>
                 <input type="hidden" id="edit-id">
+
+                <!-- 【追加】 変更前→変更後 を視覚的に示すパネル -->
+                <div id="diff-display" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-sm shadow-sm hidden">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-gray-600 font-bold">状況</span>
+                        <span><span id="diff-status-old" class="font-bold">未</span> <span class="text-gray-400 mx-1">→</span> <span id="diff-status-new" class="font-bold">済</span></span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 font-bold">金額</span>
+                        <span><span id="diff-amount-old" class="font-mono">0円</span> <span class="text-gray-400 mx-1">→</span> <span id="diff-amount-new" class="font-mono font-bold">10,000円</span></span>
+                    </div>
+                </div>
+
                 <div class="mb-3">
                     <label class="block text-xs font-bold text-gray-600 mb-1">氏名 (変更可能)</label>
-                    <!-- 【改修】 readonly を外し、編集可能に -->
                     <input type="text" id="edit-name" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-blue-500 font-bold text-gray-800 bg-white">
                 </div>
                 <div class="mb-3">
                     <label class="block text-xs font-bold text-gray-600 mb-1">支払状況</label>
-                    <select id="edit-status" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-blue-500 font-bold">
+                    <select id="edit-status" onchange="updateDiffFromInputs()" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-blue-500 font-bold">
                         <option value="">未</option>
                         <option value="済">済</option>
                     </select>
@@ -288,7 +312,7 @@
                 <div class="mb-5">
                     <label class="block text-xs font-bold text-gray-600 mb-1">金額(円)</label>
                     <div id="edit-preset-container" class="flex gap-2 mb-2 overflow-x-auto no-scrollbar pb-1"></div>
-                    <input type="number" id="edit-amount" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-blue-500 font-mono text-lg text-right">
+                    <input type="number" id="edit-amount" oninput="updateDiffFromInputs()" class="w-full border border-gray-300 p-2 rounded focus:ring-2 focus:ring-blue-500 font-mono text-lg text-right">
                 </div>
                 
                 <div class="flex gap-2 mb-4">
@@ -296,7 +320,7 @@
                     <button onclick="saveEdit()" class="w-2/3 bg-blue-600 text-white font-bold py-3 rounded-lg shadow hover:bg-blue-700">💾 変更を保存</button>
                 </div>
 
-                <!-- 【追加】データの削除ボタン -->
+                <!-- データの削除ボタン -->
                 <div class="flex justify-end border-t pt-3 mt-2">
                     <button onclick="deleteRosterData()" class="text-red-500 text-sm font-bold px-3 py-2 rounded hover:bg-red-50 transition-colors">
                         🗑️ この名簿を削除する
@@ -318,8 +342,8 @@
         let currentImageBase64 = '';
         
         let roster = [];      // 名簿データ
-        let historyLog = [];  // 変更履歴データ (Excelエクスポート用)
-        let scanData = [];    // スキャン画像とOCRテキスト保存用 (ZIPエクスポート用)
+        let historyLog = [];  // 変更履歴データ
+        let scanData = [];    // スキャン画像とテキスト
         
         let presetAmounts = [1000, 2000, 3000, 5000, 10000];
         let currentShareText = ""; 
@@ -327,13 +351,15 @@
         // ソート・検索管理
         let sortKey = 'id';
         let sortDesc = false;
-        let searchQuery = ""; // 氏名検索用
+        let searchQuery = ""; 
 
         // バーコードリーダー管理
         let html5QrCode = null;
         let isScannerActive = false;
         let lastScannedId = "";
         let lastScannedTime = 0;
+        let unknownScanCount = 0; // 未登録IDの連続スキャン回数
+        let isModalOpen = false;  // ポップアップ表示中はスキャンを無視するフラグ
 
         // --- 初期化 ---
         document.addEventListener('DOMContentLoaded', async () => {
@@ -376,6 +402,7 @@
             const txt = document.getElementById('barcode-btn-text');
             const readerDiv = document.getElementById('reader');
             const placeholder = document.getElementById('reader-placeholder');
+            const scannerGuide = document.getElementById('scanner-guide');
 
             if (isScannerActive) {
                 // オフにする
@@ -387,6 +414,7 @@
                 btn.classList.add('bg-gray-500');
                 txt.textContent = "ＢＣ";
                 readerDiv.style.display = 'none';
+                scannerGuide.classList.add('hidden');
                 placeholder.style.display = 'block';
             } else {
                 // オンにする
@@ -398,25 +426,37 @@
                 btn.classList.add('bg-orange-600');
                 txt.textContent = "停止";
                 readerDiv.style.display = 'block';
+                scannerGuide.classList.remove('hidden');
                 placeholder.style.display = 'none';
 
-                const config = { fps: 10, qrbox: { width: 250, height: 100 } };
+                const config = { fps: 15, qrbox: { width: 250, height: 100 } };
                 try {
                     await html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-                        // 連続スキャン防止 (2秒間は同じコードを無視)
-                        const now = Date.now();
-                        if (decodedText === lastScannedId && now - lastScannedTime < 2000) return;
-                        lastScannedId = decodedText;
-                        lastScannedTime = now;
+                        // モーダル入力中はスキャンを無視する
+                        if (isModalOpen) return;
 
-                        if (navigator.vibrate) navigator.vibrate(50);
-                        
-                        // IDで検索
+                        // 連続スキャン防止 (1秒間隔をあける)
+                        const now = Date.now();
+                        if (now - lastScannedTime < 1000) return; 
+
                         const p = roster.find(r => String(r["ID"]) === String(decodedText));
                         if (p) {
-                            openEditModal(p["ID"]);
+                            unknownScanCount = 0; // 成功でリセット
+                            lastScannedId = decodedText;
+                            lastScannedTime = now;
+                            if (navigator.vibrate) navigator.vibrate(50);
+                            
+                            // バーコード経由で開くフラグ(true)を渡す
+                            openEditModal(p["ID"], true);
                         } else {
-                            alert(`未登録のIDです: ${decodedText}`);
+                            lastScannedId = decodedText;
+                            lastScannedTime = now;
+                            unknownScanCount++;
+                            // 5回連続で未登録ならアラートを出す
+                            if (unknownScanCount >= 5) {
+                                alert(`未登録のIDです: ${decodedText}\n名簿を確認してください。`);
+                                unknownScanCount = 0; // アラート後にリセット
+                            }
                         }
                     });
                 } catch (err) {
@@ -436,7 +476,6 @@
             if (!container.classList.contains('hidden')) {
                 document.getElementById('search-name-input').focus();
             } else {
-                // 閉じるときは検索クリア
                 document.getElementById('search-name-input').value = "";
                 searchQuery = "";
                 renderRosterTable();
@@ -495,8 +534,13 @@
         }
 
         window.setPresetAmount = function(amt, target) {
-            if(target === 'ext') document.getElementById('ext-amount').value = amt;
-            if(target === 'edit') document.getElementById('edit-amount').value = amt;
+            if(target === 'ext') {
+                document.getElementById('ext-amount').value = amt;
+            }
+            if(target === 'edit') {
+                document.getElementById('edit-amount').value = amt;
+                updateDiffFromInputs(); // 金額変更時も差分表示を更新
+            }
             if (navigator.vibrate) navigator.vibrate(20);
         };
 
@@ -557,7 +601,16 @@
             setTimeout(() => err.classList.add('hidden'), 5000);
             window.scrollTo(0, 0);
         }
-        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+        
+        function closeModal(id) { 
+            document.getElementById(id).classList.add('hidden'); 
+            // 編集モーダルが閉じられたら、スキャンロックを解除
+            if (id === 'edit-modal') {
+                isModalOpen = false;
+                unknownScanCount = 0; // ついでにカウンタリセット
+            }
+        }
+
         function showLoading(msg) {
             document.getElementById('loading-text').textContent = msg;
             document.getElementById('loading-overlay').classList.remove('hidden');
@@ -793,15 +846,79 @@
             resetScanFlow();
         });
 
-        // --- 手動編集・削除機能 ---
-        window.openEditModal = function(id) {
+        // --- 色判定ロジック ---
+        function getStatusColorClass(status) {
+            if (status === "済") return "text-green-600 font-bold";
+            // 未、取消、削除などは赤字にする
+            return "text-red-600 font-bold";
+        }
+
+        // --- 手動編集・変更確認機能 ---
+        
+        // fromBarcode が true の場合、自動的に「済」＆プレセット金額が入る
+        window.openEditModal = function(id, fromBarcode = false) {
             const person = roster.find(r => String(r.ID) === String(id));
             if(!person) return;
+            
+            isModalOpen = true; // スキャンを無視するロックをかける
+
             document.getElementById('edit-id').value = person.ID;
             document.getElementById('edit-name').value = person["氏名"];
-            document.getElementById('edit-status').value = person["支払状況"] === "済" ? "済" : "";
-            document.getElementById('edit-amount').value = person["金額"] || "";
+            
+            // 変更前の状態を保持
+            const oldStatus = person["支払状況"] || "未";
+            const oldAmount = parseInt(person["金額"]) || 0;
+            document.getElementById('edit-modal').dataset.oldStatus = oldStatus;
+            document.getElementById('edit-modal').dataset.oldAmount = oldAmount;
+
+            // 初期セットする目標値
+            let targetStatus = oldStatus;
+            let targetAmount = oldAmount;
+
+            if (fromBarcode) {
+                targetStatus = "済";
+                targetAmount = presetAmounts.length > 0 ? presetAmounts[0] : 0;
+            } else {
+                targetStatus = oldStatus === "済" ? "済" : ""; 
+            }
+
+            document.getElementById('edit-status').value = targetStatus === "済" ? "済" : "";
+            document.getElementById('edit-amount').value = targetAmount || "";
+
+            // 変更前後のUIを更新
+            updateDiffFromInputs();
+
+            // モーダルと差分表示UIを開く
+            document.getElementById('diff-display').classList.remove('hidden');
             document.getElementById('edit-modal').classList.remove('hidden');
+        };
+
+        // セレクトや入力が変わった時に「変更前 → 変更後」のUIを更新する
+        window.updateDiffFromInputs = function() {
+            const oldStatus = document.getElementById('edit-modal').dataset.oldStatus || "未";
+            const oldAmount = parseInt(document.getElementById('edit-modal').dataset.oldAmount) || 0;
+            
+            const newStatusVal = document.getElementById('edit-status').value;
+            const newStatus = newStatusVal === "済" ? "済" : "未";
+            const newAmount = parseInt(document.getElementById('edit-amount').value) || 0;
+
+            const oldStatSpan = document.getElementById('diff-status-old');
+            const newStatSpan = document.getElementById('diff-status-new');
+            oldStatSpan.textContent = oldStatus;
+            oldStatSpan.className = getStatusColorClass(oldStatus);
+            newStatSpan.textContent = newStatus;
+            newStatSpan.className = getStatusColorClass(newStatus);
+
+            document.getElementById('diff-amount-old').textContent = `${oldAmount.toLocaleString()}円`;
+            const newAmtSpan = document.getElementById('diff-amount-new');
+            newAmtSpan.textContent = `${newAmount.toLocaleString()}円`;
+            
+            // 金額が変更されたら色を強調
+            if(oldAmount !== newAmount && newStatus === "済") {
+                newAmtSpan.classList.add('text-blue-600');
+            } else {
+                newAmtSpan.classList.remove('text-blue-600');
+            }
         };
 
         window.saveEdit = async function() {
@@ -813,9 +930,8 @@
             
             const person = roster.find(r => String(r.ID) === String(id));
             if(person) {
-                const oldStatus = person["支払状況"]; 
-                const oldAmount = person["金額"];
-                const oldName = person["氏名"];
+                const oldStatus = person["支払状況"] || "未"; 
+                const oldAmount = person["金額"] || 0;
 
                 person["氏名"] = newName;
                 person["支払状況"] = newStatus;
@@ -823,8 +939,8 @@
                 person["支払日時"] = nowStr;
                 
                 historyLog.push({
-                    "日時": nowStr, "操作": "手動編集", "ID": person.ID, "氏名": newName,
-                    "変更前状況": oldStatus, "変更後状況": person["支払状況"], "変更前金額": oldAmount, "変更後金額": person["金額"]
+                    "日時": nowStr, "操作": "手動編集/BC", "ID": person.ID, "氏名": newName,
+                    "変更前状況": oldStatus, "変更後状況": person["支払状況"] || "未", "変更前金額": oldAmount, "変更後金額": person["金額"] || 0
                 });
                 
                 await localforage.setItem('receiptRosterData', roster);
@@ -889,7 +1005,6 @@
             tbody.innerHTML = '';
             let paidCount = 0; let totalAmount = 0;
             
-            // フィルタ適用前（全体）の統計を計算
             roster.forEach(row => {
                 if (row["支払状況"] === "済") {
                     paidCount++; 
@@ -900,6 +1015,8 @@
 
             filteredData.forEach(row => {
                 const isPaid = row["支払状況"] === "済";
+                const displayStatus = row["支払状況"] || "未";
+                
                 const tr = document.createElement('tr');
                 tr.className = isPaid ? "bg-green-50" : "hover:bg-gray-50";
                 tr.innerHTML = `
@@ -907,7 +1024,7 @@
                     <td class="p-2 border-b text-center font-bold">${escapeHtml(row["組"] || "-")}</td>
                     <td class="p-2 border-b font-bold truncate max-w-[150px]">${escapeHtml(row["氏名"])}</td>
                     <td class="p-2 border-b text-center">
-                        ${isPaid ? '<span class="text-green-600 font-bold">済</span>' : '<span class="text-gray-400">未</span>'}
+                        <span class="${getStatusColorClass(displayStatus)}">${escapeHtml(displayStatus)}</span>
                     </td>
                     <td class="p-2 border-b text-right font-mono">${row["金額"] ? parseInt(row["金額"]).toLocaleString() : ''}</td>
                     <td class="p-2 border-b text-center">
@@ -1003,7 +1120,7 @@
             if (type === 'all') {
                 text += "【全員リスト】\n";
                 roster.forEach(r => {
-                    const status = r["支払状況"] === "済" ? "済" : "未";
+                    const status = r["支払状況"] || "未";
                     text += `${r.ID} ${r["氏名"]} ${r["組"]||"-"}組 ${status} ${r["金額"]?r["金額"]+"円":""}\n`;
                 });
             } else if (type === 'paid') {
