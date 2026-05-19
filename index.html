@@ -3,11 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>レシート集計リーダー (多機能版) ｖ8</title>
+    <title>レシート集計リーダー (多機能版) ｖ9</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- localForage (内部ストレージ) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <!-- SheetJS (Excel読み書き) -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <!-- JSZip (ZIP圧縮用) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- HTML5 QR Code (バーコードリーダー) -->
     <script src="https://unpkg.com/html5-qrcode"></script>
 
     <style>
@@ -33,13 +38,20 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* バーコードリーダー領域の強制スタイル調整 */
-        #reader { border: none !important; }
+        /* バーコードリーダー領域の強制スタイル調整（高さの強制上書き対応） */
+        #reader { 
+            border: none !important; 
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 100% !important;
+        }
         #reader video {
             object-fit: cover !important;
             width: 100% !important;
             height: 100% !important;
             border-radius: 0.75rem;
+            transition: transform 0.1s ease-out; 
+            transform-origin: center center;
         }
         
         /* ライブラリが自動生成する2重の白枠・濃い影（Canvas）をCSSで非表示にして干渉を防ぐ */
@@ -55,13 +67,14 @@
 <body class="bg-gray-100 text-gray-800 pb-20">
 
     <header class="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
-        <h1 class="text-xl font-bold">📊 集計 (V8 ネイティブ操作)</h1>
+        <h1 class="text-xl font-bold">📊 集計 (V9 高確度スキャン)</h1>
         <button id="nav-settings-btn" class="p-2 rounded hover:bg-blue-800 text-sm font-bold">⚙️ 設定/名簿</button>
     </header>
 
     <main class="p-4 max-w-2xl mx-auto">
         <div id="error-msg" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded shadow-sm"></div>
 
+        <!-- ⚙️ 設定・名簿インポート -->
         <section id="setup-area" class="hidden bg-white p-6 rounded-xl shadow-md mb-6">
             <h2 class="text-lg font-bold mb-2 text-blue-700 border-b pb-2">1. APIキー設定</h2>
             <input type="text" id="api-key-input" class="w-full border p-3 rounded mb-4 outline-none focus:ring-2 focus:ring-blue-500">
@@ -127,6 +140,7 @@
             </div>
 
             <div id="scanner-wrapper" class="hidden mb-4 relative w-full">
+                <!-- カメラ映像領域 (高さをJSで強制指定します) -->
                 <div class="bg-gray-900 rounded-xl shadow-inner relative overflow-hidden flex justify-center items-center w-full" id="reader-container">
                     <div id="reader" style="width: 100%; height: 100%;"></div>
                     <div id="scanner-guide" class="absolute inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden">
@@ -136,24 +150,29 @@
                     </div>
                 </div>
 
-                <div id="camera-controls-container" class="hidden mt-2 bg-gray-800 rounded-xl p-3 text-white text-xs shadow-md">
-                    <div class="flex justify-between mb-3 border-b border-gray-600 pb-2">
+                <!-- 常に表示させるコントロールパネル -->
+                <div id="camera-controls-container" class="mt-2 bg-gray-800 rounded-xl p-3 text-white text-xs shadow-md">
+                    <!-- ライト & フォーカス切替 (対応時のみ表示) -->
+                    <div id="advanced-controls" class="flex justify-between mb-3 border-b border-gray-600 pb-2 hidden">
                         <button id="torch-btn" class="hidden bg-gray-700 hover:bg-gray-600 px-4 py-1.5 rounded font-bold transition-colors">💡 ライト: <span class="text-gray-300">OFF</span></button>
                         <button id="focus-mode-btn" class="hidden bg-gray-700 hover:bg-gray-600 px-4 py-1.5 rounded font-bold transition-colors">🎯 フォーカス: <span class="text-blue-300">AUTO</span></button>
                     </div>
                     
-                    <div id="zoom-control-wrapper" class="flex items-center gap-2 mb-3 hidden">
+                    <!-- ズームスライダー (常に表示し、CSSデジタルズームを保証) -->
+                    <div id="zoom-control-wrapper" class="flex items-center gap-2 mb-2">
                         <span class="w-10 text-right font-bold text-gray-300">ズーム</span>
-                        <input type="range" id="zoom-slider" class="flex-1 accent-blue-500 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
-                        <span id="zoom-val" class="w-8 text-right font-mono font-bold text-blue-300">1.0</span>
+                        <input type="range" id="zoom-slider" min="1.0" max="4.0" step="0.1" value="2.0" class="flex-1 accent-blue-500 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                        <span id="zoom-val" class="w-8 text-right font-mono font-bold text-blue-300">2.0x</span>
                     </div>
 
-                    <div id="exp-control-wrapper" class="flex items-center gap-2 mb-3 hidden">
+                    <!-- 露出スライダー (対応時のみ) -->
+                    <div id="exp-control-wrapper" class="flex items-center gap-2 mb-2 hidden">
                         <span class="w-10 text-right font-bold text-gray-300">露出</span>
                         <input type="range" id="exp-slider" class="flex-1 accent-yellow-500 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
                         <span id="exp-val" class="w-8 text-right font-mono font-bold text-yellow-300">0.0</span>
                     </div>
 
+                    <!-- 手動フォーカス距離スライダー (対応時のみ) -->
                     <div id="focus-dist-wrapper" class="flex items-center gap-2 hidden">
                         <span class="w-10 text-right font-bold text-gray-300">距離</span>
                         <input type="range" id="focus-dist-slider" class="flex-1 accent-green-500 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
@@ -356,7 +375,7 @@
 
         let configScannerHeight = 1.0;
 
-        // 【新設】カメラの永続設定オブジェクト
+        // カメラの永続設定オブジェクト (ズーム初期値は 2.0x 固定)
         let camSettings = {
             zoom: 2.0,
             exposure: 0.0,
@@ -386,6 +405,7 @@
             const savedCamSettings = await localforage.getItem('cameraNativeSettings');
             if (savedCamSettings) {
                 camSettings = { ...camSettings, ...savedCamSettings };
+                camSettings.zoom = 2.0; // 常に起動時は2倍スタートにする
             }
 
             if (savedRoster) roster = savedRoster;
@@ -435,7 +455,9 @@
             const wrapper = document.getElementById('scanner-wrapper');
             const readerContainer = document.getElementById('reader-container');
             
-            readerContainer.style.height = `${224 * configScannerHeight}px`;
+            // 【修正】高さをピクセル値で強制適用
+            const targetHeight = Math.floor(224 * configScannerHeight);
+            readerContainer.style.height = `${targetHeight}px`;
             wrapper.classList.remove('hidden');
 
             if (!html5QrCode) {
@@ -486,8 +508,8 @@
                         }
                     );
                     
-                    // 起動成功後、ネイティブカメラ機能を初期化・復元
-                    initNativeCameraControls();
+                    // 起動後、必ずコントロールパネルとズームを適用
+                    initCameraControls();
 
                 } catch (err) {
                     console.error("スキャナー起動に失敗:", err);
@@ -497,10 +519,19 @@
             }, 150);
         }
 
-        // --- ネイティブカメラ操作の実装 ---
-        function initNativeCameraControls() {
+        // --- カメラ操作とズームの適用 ---
+        function initCameraControls() {
+            // パネル自体は必ず表示させる（ズームが必ず使えるようにするため）
+            document.getElementById('camera-controls-container').classList.remove('hidden');
+            document.getElementById('zoom-control-wrapper').classList.remove('hidden');
+            
+            // ズームスライダー初期値反映
+            const zs = document.getElementById('zoom-slider');
+            zs.value = camSettings.zoom;
+            document.getElementById('zoom-val').textContent = camSettings.zoom.toFixed(1) + "x";
+
             let attempt = 0;
-            const checkTrack = () => {
+            const checkCapabilities = () => {
                 if (!isScannerActive) return;
                 
                 try {
@@ -508,8 +539,9 @@
                     if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
                         const cap = videoTrack.getCapabilities();
                         if (Object.keys(cap).length > 0) {
-                            setupCameraUI(cap);
-                            applyCameraSettings();
+                            // ネイティブ機能が取得できた場合、追加のコントロールを開放
+                            setupAdvancedUI(cap);
+                            applyCameraSettingsAndZoom();
                             return; 
                         }
                     }
@@ -519,65 +551,57 @@
 
                 if (attempt < 15) {
                     attempt++;
-                    setTimeout(checkTrack, 100);
+                    setTimeout(checkCapabilities, 100);
                 } else {
-                    console.log("この端末では詳細なカメラAPI操作がサポートされていない可能性があります。");
+                    console.log("ネイティブの高度なカメラ制御は非対応です。CSSズームを使用します。");
+                    // 失敗してもCSSズームはかける
+                    applyCameraSettingsAndZoom();
                 }
             };
-            checkTrack();
+            checkCapabilities();
         }
 
-        function setupCameraUI(cap) {
-            document.getElementById('camera-controls-container').classList.remove('hidden');
-            
-            // ズーム設定
+        function setupAdvancedUI(cap) {
             if (cap.zoom) {
-                document.getElementById('zoom-control-wrapper').classList.remove('hidden');
                 const zs = document.getElementById('zoom-slider');
-                zs.min = cap.zoom.min || 1;
-                zs.max = cap.zoom.max || 5;
+                zs.min = cap.zoom.min || 1.0;
+                zs.max = cap.zoom.max || 5.0;
                 zs.step = cap.zoom.step || 0.1;
-                camSettings.zoom = Math.max(zs.min, Math.min(camSettings.zoom, zs.max));
+                camSettings.zoom = Math.max(zs.min, Math.min(2.0, zs.max)); // 2.0か限界値
                 zs.value = camSettings.zoom;
-                document.getElementById('zoom-val').textContent = camSettings.zoom.toFixed(1);
+                document.getElementById('zoom-val').textContent = camSettings.zoom.toFixed(1) + "x";
             }
             
-            // 露出設定
             if (cap.exposureCompensation) {
                 document.getElementById('exp-control-wrapper').classList.remove('hidden');
                 const es = document.getElementById('exp-slider');
                 es.min = cap.exposureCompensation.min;
                 es.max = cap.exposureCompensation.max;
                 es.step = cap.exposureCompensation.step || 0.1;
-                camSettings.exposure = Math.max(es.min, Math.min(camSettings.exposure, es.max));
                 es.value = camSettings.exposure;
                 document.getElementById('exp-val').textContent = camSettings.exposure.toFixed(1);
             }
 
-            // フォーカス設定
             if (cap.focusMode) {
+                document.getElementById('advanced-controls').classList.remove('hidden');
                 const btn = document.getElementById('focus-mode-btn');
                 btn.classList.remove('hidden');
                 btn.querySelector('span').textContent = camSettings.focusMode === 'manual' ? 'MANUAL' : 'AUTO';
                 btn.querySelector('span').className = camSettings.focusMode === 'manual' ? 'text-green-300' : 'text-blue-300';
                 
-                if (cap.focusDistance) {
+                if (cap.focusDistance && camSettings.focusMode === 'manual') {
+                    document.getElementById('focus-dist-wrapper').classList.remove('hidden');
                     const fs = document.getElementById('focus-dist-slider');
                     fs.min = cap.focusDistance.min;
                     fs.max = cap.focusDistance.max;
                     fs.step = cap.focusDistance.step || 0.01;
-                    
-                    if (camSettings.focusMode === 'manual') {
-                        document.getElementById('focus-dist-wrapper').classList.remove('hidden');
-                        camSettings.focusDistance = Math.max(fs.min, Math.min(camSettings.focusDistance, fs.max));
-                        fs.value = camSettings.focusDistance;
-                        document.getElementById('focus-dist-val').textContent = camSettings.focusDistance.toFixed(2);
-                    }
+                    fs.value = camSettings.focusDistance;
+                    document.getElementById('focus-dist-val').textContent = camSettings.focusDistance.toFixed(2);
                 }
             }
 
-            // ライト (Torch)
             if (cap.torch) {
+                document.getElementById('advanced-controls').classList.remove('hidden');
                 const tb = document.getElementById('torch-btn');
                 tb.classList.remove('hidden');
                 tb.querySelector('span').textContent = camSettings.torch ? 'ON' : 'OFF';
@@ -585,7 +609,15 @@
             }
         }
 
-        async function applyCameraSettings() {
+        // ズーム(CSS＆ネイティブ)と各種設定を適用する関数
+        async function applyCameraSettingsAndZoom() {
+            // 1. CSSズームは必ず適用（フォールバック）
+            const videoEl = document.querySelector('#reader video');
+            if (videoEl) {
+                videoEl.style.transform = `scale(${camSettings.zoom})`;
+            }
+
+            // 2. ネイティブ設定適用
             if (!videoTrack) return;
             try {
                 const cap = videoTrack.getCapabilities();
@@ -597,11 +629,10 @@
                 if (camSettings.focusMode === 'manual' && cap.focusDistance) advanced.focusDistance = camSettings.focusDistance;
                 if (cap.torch) advanced.torch = camSettings.torch;
 
-                if (Object.keys(advanced).length > 0) {
-                    await videoTrack.applyConstraints({ advanced: [advanced] });
+                if (Object.keys(advanced).length > 0 && typeof videoTrack.applyConstraints === 'function') {
+                    await videoTrack.applyConstraints({ advanced: [advanced] }).catch(e => console.warn(e));
                 }
                 
-                // 変更を永続保存
                 await localforage.setItem('cameraNativeSettings', camSettings);
             } catch (e) {
                 console.error("Camera constraints apply failed:", e);
@@ -611,14 +642,14 @@
         function bindCameraControls() {
             document.getElementById('zoom-slider').addEventListener('input', (e) => {
                 camSettings.zoom = parseFloat(e.target.value);
-                document.getElementById('zoom-val').textContent = camSettings.zoom.toFixed(1);
-                applyCameraSettings();
+                document.getElementById('zoom-val').textContent = camSettings.zoom.toFixed(1) + "x";
+                applyCameraSettingsAndZoom();
             });
 
             document.getElementById('exp-slider').addEventListener('input', (e) => {
                 camSettings.exposure = parseFloat(e.target.value);
                 document.getElementById('exp-val').textContent = camSettings.exposure.toFixed(1);
-                applyCameraSettings();
+                applyCameraSettingsAndZoom();
             });
 
             document.getElementById('focus-mode-btn').addEventListener('click', () => {
@@ -635,13 +666,13 @@
                         document.getElementById('focus-dist-wrapper').classList.add('hidden');
                     }
                 }
-                applyCameraSettings();
+                applyCameraSettingsAndZoom();
             });
 
             document.getElementById('focus-dist-slider').addEventListener('input', (e) => {
                 camSettings.focusDistance = parseFloat(e.target.value);
                 document.getElementById('focus-dist-val').textContent = camSettings.focusDistance.toFixed(2);
-                applyCameraSettings();
+                applyCameraSettingsAndZoom();
             });
 
             document.getElementById('torch-btn').addEventListener('click', () => {
@@ -649,7 +680,7 @@
                 const span = document.getElementById('torch-btn').querySelector('span');
                 span.textContent = camSettings.torch ? 'ON' : 'OFF';
                 span.className = camSettings.torch ? 'text-yellow-300' : 'text-gray-300';
-                applyCameraSettings();
+                applyCameraSettingsAndZoom();
             });
         }
 
@@ -660,33 +691,29 @@
             const container = document.getElementById('reader-container');
 
             container.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 2 && videoTrack) {
-                    const cap = videoTrack.getCapabilities();
-                    if (!cap.zoom) return;
+                if (e.touches.length === 2) {
                     initialPinchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                     initialPinchZoom = camSettings.zoom;
                 }
             }, {passive: false});
 
             container.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 2 && initialPinchDistance && videoTrack) {
-                    e.preventDefault(); // 画面スクロール防止
-                    const cap = videoTrack.getCapabilities();
-                    if (!cap.zoom) return;
-                    
+                if (e.touches.length === 2 && initialPinchDistance) {
+                    e.preventDefault(); 
                     const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
                     const ratio = dist / initialPinchDistance;
                     let newZoom = initialPinchZoom * ratio;
                     
-                    const minZ = cap.zoom.min || 1;
-                    const maxZ = cap.zoom.max || 5;
+                    const zs = document.getElementById('zoom-slider');
+                    const minZ = parseFloat(zs.min) || 1.0;
+                    const maxZ = parseFloat(zs.max) || 4.0;
                     newZoom = Math.max(minZ, Math.min(newZoom, maxZ)); 
                     
                     if (Math.abs(newZoom - camSettings.zoom) > 0.05) {
                         camSettings.zoom = newZoom;
-                        document.getElementById('zoom-slider').value = newZoom;
-                        document.getElementById('zoom-val').textContent = newZoom.toFixed(1);
-                        applyCameraSettings();
+                        zs.value = newZoom;
+                        document.getElementById('zoom-val').textContent = newZoom.toFixed(1) + "x";
+                        applyCameraSettingsAndZoom();
                     }
                 }
             }, {passive: false});
@@ -707,7 +734,6 @@
             }
             videoTrack = null;
             document.getElementById('scanner-wrapper').classList.add('hidden');
-            document.getElementById('camera-controls-container').classList.add('hidden');
         }
 
         async function deactivateScanner() {
