@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>レシート集計リーダー (多機能版) ｖ10</title>
+    <title>レシート集計リーダー (多機能版) ｖ11</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- localForage (内部ストレージ) -->
@@ -53,20 +53,23 @@
             transform-origin: center center;
         }
         
-        /* ライブラリが自動生成する2重の白枠・濃い影（Canvas）をCSSで非表示にして干渉を防ぐ */
-        #reader canvas {
+        /* 【重要・バグ防止】ライブラリが自動生成する余計な白枠、キャンバス、シェーディングをCSSで完全に非表示にし、自作のオーバーレイと2重化するのを防ぎます */
+        #reader canvas,
+        #reader__scan_region,
+        #reader__shading {
             display: none !important;
         }
         
+        /* スキャンゾーンの半透明オーバーレイ (暗すぎないよう rgba 0.35 に調整) */
         .scan-overlay {
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
         }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 pb-20">
 
     <header class="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
-        <h1 class="text-xl font-bold">📊 集計 (V10 高確度・堅牢版)</h1>
+        <h1 class="text-xl font-bold">📊 集計 (V11 超安定版)</h1>
         <button id="nav-settings-btn" class="p-2 rounded hover:bg-blue-800 text-sm font-bold">⚙️ 設定/名簿</button>
     </header>
 
@@ -139,7 +142,7 @@
             </div>
 
             <div id="scanner-wrapper" class="hidden mb-4 relative w-full">
-                <!-- カメラ映像領域 (高さをJSで強制指定します) -->
+                <!-- カメラ映像領域 -->
                 <div class="bg-gray-900 rounded-xl shadow-inner relative overflow-hidden flex justify-center items-center w-full" id="reader-container">
                     <div id="reader" style="width: 100%; height: 100%;"></div>
                     <div id="scanner-guide" class="absolute inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden">
@@ -151,7 +154,7 @@
 
                 <!-- 常に表示させるコントロールパネル -->
                 <div id="camera-controls-container" class="hidden mt-2 bg-gray-800 rounded-xl p-3 text-white text-xs shadow-md">
-                    <!-- ライト & フォーカス切替 (対応時のみ表示) -->
+                    <!-- ライト & フォーカス切替 -->
                     <div id="advanced-controls" class="flex justify-between mb-3 border-b border-gray-600 pb-2 hidden">
                         <button id="torch-btn" class="hidden bg-gray-700 hover:bg-gray-600 px-4 py-1.5 rounded font-bold transition-colors">💡 ライト: <span class="text-gray-300">OFF</span></button>
                         <button id="focus-mode-btn" class="hidden bg-gray-700 hover:bg-gray-600 px-4 py-1.5 rounded font-bold transition-colors">🎯 フォーカス: <span class="text-blue-300">AUTO</span></button>
@@ -164,14 +167,14 @@
                         <span id="zoom-val" class="w-8 text-right font-mono font-bold text-blue-300">2.0x</span>
                     </div>
 
-                    <!-- 露出スライダー (対応時のみ) -->
+                    <!-- 露出スライダー -->
                     <div id="exp-control-wrapper" class="flex items-center gap-2 mb-2 hidden">
                         <span class="w-10 text-right font-bold text-gray-300">露出</span>
                         <input type="range" id="exp-slider" class="flex-1 accent-yellow-500 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
                         <span id="exp-val" class="w-8 text-right font-mono font-bold text-yellow-300">0.0</span>
                     </div>
 
-                    <!-- 手動フォーカス距離スライダー (対応時のみ) -->
+                    <!-- 手動フォーカス距離スライダー -->
                     <div id="focus-dist-wrapper" class="flex items-center gap-2 hidden">
                         <span class="w-10 text-right font-bold text-gray-300">距離</span>
                         <input type="range" id="focus-dist-slider" class="flex-1 accent-green-500 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
@@ -180,14 +183,16 @@
                 </div>
             </div>
 
+            <!-- OCR プレビューエリア -->
             <div id="preview-area" class="hidden bg-white p-4 rounded-xl shadow-md mb-6 text-center">
                 <img id="preview-img" src="" alt="プレビュー" class="max-h-64 mx-auto rounded border border-gray-200 mb-4 object-contain">
                 <div class="flex gap-2">
-                    <button id="cancel-scan-btn" class="w-1/3 bg-gray-300 text-gray-700 font-bold py-3 rounded-lg shadow hover:bg-gray-400">戻る</button>
+                    <button id="cancel-scan-btn" class="w-1/3 bg-gray-300 text-gray-700 font-bold py-3 rounded-lg shadow hover:bg-gray-400">やり直す</button>
                     <button id="scan-btn" class="w-2/3 bg-green-500 text-white font-bold py-3 rounded-lg shadow hover:bg-green-600 text-lg">✨ OCR読み取り</button>
                 </div>
             </div>
 
+            <!-- OCR 抽出結果確認エリア -->
             <div id="extraction-area" class="hidden bg-white p-5 rounded-xl shadow-md mb-6 border-2 border-indigo-400">
                 <h3 class="font-bold text-lg text-indigo-700 mb-3 border-b pb-2">1. 読み取りテキスト (修正可)</h3>
                 
@@ -230,6 +235,7 @@
                 </div>
             </div>
 
+            <!-- 名簿一覧エリア -->
             <div id="summary-section">
                 <div class="flex justify-between items-end mb-2 border-b pb-2">
                     <div id="roster-header-title" class="long-pressable cursor-pointer active:bg-gray-200 p-1 rounded transition-colors w-full flex justify-between items-center">
@@ -353,6 +359,7 @@
             </div>
         </div>
 
+        <!-- ローディング -->
         <div id="loading-overlay" class="hidden fixed inset-0 bg-black bg-opacity-70 z-50 flex flex-col items-center justify-center">
             <div class="loader mb-4"></div>
             <p id="loading-text" class="text-white font-bold text-lg text-center whitespace-pre-wrap">処理中...</p>
@@ -397,23 +404,27 @@
         document.addEventListener('DOMContentLoaded', async () => {
             localforage.config({ name: 'ReceiptApp', storeName: 'app_data' });
             
-            apiKey = await localforage.getItem('visionApiKey');
-            const savedRoster = await localforage.getItem('receiptRosterData');
-            const savedLog = await localforage.getItem('receiptHistoryLog');
-            const savedScan = await localforage.getItem('receiptScanData');
-            const savedPresets = await localforage.getItem('receiptPresetAmounts');
-            
-            configScannerHeight = await localforage.getItem('configScannerHeight') || 1.0;
-            const savedCamSettings = await localforage.getItem('cameraNativeSettings');
-            if (savedCamSettings) {
-                camSettings = { ...camSettings, ...savedCamSettings };
-                camSettings.zoom = 2.0; // 常に起動時は2倍スタートにする
-            }
+            try {
+                apiKey = await localforage.getItem('visionApiKey');
+                const savedRoster = await localforage.getItem('receiptRosterData');
+                const savedLog = await localforage.getItem('receiptHistoryLog');
+                const savedScan = await localforage.getItem('receiptScanData');
+                const savedPresets = await localforage.getItem('receiptPresetAmounts');
+                
+                configScannerHeight = await localforage.getItem('configScannerHeight') || 1.0;
+                const savedCamSettings = await localforage.getItem('cameraNativeSettings');
+                if (savedCamSettings) {
+                    camSettings = { ...camSettings, ...savedCamSettings };
+                    camSettings.zoom = 2.0; // 常に起動時は2倍スタートにする
+                }
 
-            if (savedRoster) roster = savedRoster;
-            if (savedLog) historyLog = savedLog;
-            if (savedScan) scanData = savedScan;
-            if (savedPresets) presetAmounts = savedPresets;
+                if (savedRoster) roster = savedRoster;
+                if (savedLog) historyLog = savedLog;
+                if (savedScan) scanData = savedScan;
+                if (savedPresets) presetAmounts = savedPresets;
+            } catch (err) {
+                console.error("ローカルストレージからのロードエラー:", err);
+            }
 
             renderPresetSettings();
             document.getElementById('config-height-input').value = configScannerHeight;
@@ -430,20 +441,31 @@
                 showMainArea();
             }
 
-            setupLongPress(document.getElementById('stats-summary-box'), openStatsModal);
-            setupLongPress(document.getElementById('roster-header-title'), () => {
-                document.getElementById('copy-modal').classList.remove('hidden');
-            });
+            // 安全に長押しイベントをバインド
+            try {
+                setupLongPress(document.getElementById('stats-summary-box'), openStatsModal);
+                setupLongPress(document.getElementById('roster-header-title'), () => {
+                    document.getElementById('copy-modal').classList.remove('hidden');
+                });
+            } catch (e) {
+                console.error("長押しイベントのバインドエラー:", e);
+            }
             
-            setupPinchZoom();
-            bindCameraControls();
+            try {
+                setupPinchZoom();
+                bindCameraControls();
+            } catch (e) {
+                console.error("カメラ関連イベントのバインドエラー:", e);
+            }
         });
 
         // --- バーコードリーダー画面設定の保存 ---
         document.getElementById('save-config-btn').addEventListener('click', async () => {
             const heightVal = parseFloat(document.getElementById('config-height-input').value) || 1.0;
             configScannerHeight = Math.min(Math.max(heightVal, 1.0), 3.0);
-            await localforage.setItem('configScannerHeight', configScannerHeight);
+            try {
+                await localforage.setItem('configScannerHeight', configScannerHeight);
+            } catch(e) { console.error(e); }
             document.getElementById('config-height-input').value = configScannerHeight;
             
             alert("画面設定を保存しました！");
@@ -481,8 +503,10 @@
             wrapper.classList.remove('hidden');
 
             const wrapperWidth = readerContainer.clientWidth || window.innerWidth;
-            const qrboxWidth = Math.floor(wrapperWidth * 0.8); 
-            const qrboxHeight = Math.floor(90 * configScannerHeight); 
+            
+            // 【解決】QRBOXのサイズは、高さを変えても縦幅「90px」のまま完全に固定します
+            const qrboxWidth = Math.floor(wrapperWidth * 0.95); // 【解決】横幅は画面の端「95%」まで目一杯広げます
+            const qrboxHeight = 90; // 【解決】縦幅は拡大せず90pxの固定値
 
             const laserBox = document.getElementById('scanner-laser-box');
             if (laserBox) {
@@ -508,7 +532,7 @@
                 console.warn('カメラ列挙エラー: ' + e.message);
             }
 
-            // 2) 事前に getUserMedia で短時間ストリームを開いてズーム適用を試す（成功確認）
+            // 2) 事前に getUserMedia で短時間ストリームを開いてズーム適用を試す
             let testStream = null;
             let testTrack = null;
             try {
@@ -528,7 +552,9 @@
                         await testTrack.applyConstraints({ advanced: [{ zoom: target }] });
                         console.log('事前ズーム適用成功: ' + target + 'x');
                         camSettings.zoom = target;
-                        await localforage.setItem('cameraNativeSettings', camSettings);
+                        try {
+                            await localforage.setItem('cameraNativeSettings', camSettings);
+                        } catch(e) {}
                     }
                 }
             } catch (err) {
@@ -564,7 +590,6 @@
                         },
                         async (decodedText) => {
                             if (isModalOpen) return;
-                            // スキャン成功時、即カメラを停止
                             await stopScannerOnly();
 
                             const p = roster.find(r => String(r["ID"]) === String(decodedText));
@@ -700,7 +725,9 @@
                     await videoTrack.applyConstraints({ advanced: [advanced] }).catch(e => console.warn(e));
                 }
                 
-                await localforage.setItem('cameraNativeSettings', camSettings);
+                try {
+                    await localforage.setItem('cameraNativeSettings', camSettings);
+                } catch(e) {}
             } catch (e) {
                 console.error("Camera constraints apply failed:", e);
             }
@@ -805,7 +832,6 @@
             }
             videoTrack = null;
             document.getElementById('scanner-wrapper').classList.add('hidden');
-            document.getElementById('camera-controls-container').classList.add('hidden');
         }
 
         async function deactivateScanner() {
@@ -878,7 +904,9 @@
             if(val && !presetAmounts.includes(val)) {
                 presetAmounts.push(val);
                 presetAmounts.sort((a,b) => a - b);
-                await localforage.setItem('receiptPresetAmounts', presetAmounts);
+                try {
+                    await localforage.setItem('receiptPresetAmounts', presetAmounts);
+                } catch(e) {}
                 renderPresetSettings();
                 document.getElementById('new-preset-input').value = '';
             }
@@ -886,7 +914,9 @@
 
         window.deletePreset = async function(idx) {
             presetAmounts.splice(idx, 1);
-            await localforage.setItem('receiptPresetAmounts', presetAmounts);
+            try {
+                await localforage.setItem('receiptPresetAmounts', presetAmounts);
+            } catch(e) {}
             renderPresetSettings();
         };
 
@@ -959,6 +989,8 @@
         // --- 画面切り替え・UIヘルパー ---
         function showSetupArea() { document.getElementById('setup-area').classList.remove('hidden'); document.getElementById('main-area').classList.add('hidden'); }
         function showMainArea() { document.getElementById('setup-area').classList.add('hidden'); document.getElementById('main-area').classList.remove('hidden'); resetScanFlow(); }
+        
+        // 【解決・バグ防止】すべてのプレビュー・OCR抽出画面を確実に隠し、かつ非表示エラーを防ぎます
         function resetScanFlow() {
             document.getElementById('action-buttons-container').classList.remove('hidden');
             document.getElementById('preview-area').classList.add('hidden');
@@ -966,6 +998,7 @@
             document.getElementById('summary-section').classList.remove('hidden');
             document.getElementById('image-input').value = '';
         }
+        
         function showError(msg) {
             const err = document.getElementById('error-msg');
             err.textContent = msg; err.classList.remove('hidden');
@@ -973,108 +1006,30 @@
             window.scrollTo(0, 0);
         }
         
-        // --- 設定・名簿インポート ---
-        document.getElementById('nav-settings-btn').addEventListener('click', showSetupArea);
-        document.getElementById('cancel-settings-btn').addEventListener('click', () => { if (roster.length > 0) showMainArea(); });
-        document.getElementById('save-key-btn').addEventListener('click', async () => {
-            const val = document.getElementById('api-key-input').value.trim();
-            if (val) {
-                await localforage.setItem('visionApiKey', val); apiKey = val;
-                document.getElementById('api-key-input').placeholder = '【＊＊＊＊＊＊】変更する場合のみ入力';
-                document.getElementById('api-key-input').value = '';
-                alert("APIキーを保存しました。");
+        // 【解決】ポップアップ非表示化とカメラ起動を安全に分離（クラッシュループの解消）
+        function closeModal(id) { 
+            document.getElementById(id).classList.add('hidden'); 
+            if (id === 'edit-modal') {
+                isModalOpen = false;
+                unknownScanCount = 0; 
+                if (isScannerActive) {
+                    // スキャナーの再開は別スレッド扱いで安全に非同期実行
+                    startScanner().catch(err => console.error("スキャナー自動再開エラー:", err));
+                }
             }
-            if (roster.length > 0) showMainArea();
-        });
+        }
 
-        document.getElementById('roster-file-input').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            showLoading("名簿を読み込み中...");
-            const reader = new FileReader();
-            reader.onload = async (evt) => {
-                try {
-                    const data = new Uint8Array(evt.target.result);
-                    const workbook = XLSX.read(data, {type: 'array'});
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    let json = XLSX.utils.sheet_to_json(firstSheet, { defval: "" });
+        function showLoading(msg) {
+            document.getElementById('loading-text').textContent = msg;
+            document.getElementById('loading-overlay').classList.remove('hidden');
+        }
+        function hideLoading() { document.getElementById('loading-overlay').classList.add('hidden'); }
 
-                    json = json.map((row, i) => {
-                        if (!row["ID"]) row["ID"] = String(i + 1).padStart(3, '0');
-                        if (!row["支払状況"]) row["支払状況"] = "";
-                        if (!row["金額"]) row["金額"] = "";
-                        if (!row["支払日時"]) row["支払日時"] = "";
-                        return row;
-                    });
-                    roster = json;
-                    await localforage.setItem('receiptRosterData', roster);
-                    alert(`${roster.length}件の名簿を読み込みました！`);
-                    renderRosterTable();
-                    if (apiKey) showMainArea();
-                } catch (err) {
-                    showError("読み込み失敗。ファイル形式を確認してください。");
-                } finally { hideLoading(); e.target.value = ""; }
-            };
-            reader.readAsArrayBuffer(file);
-        });
-
-        document.getElementById('clear-roster-btn').addEventListener('click', async () => {
-            if (confirm("名簿とすべての支払履歴、保存された写真を消去しますか？\n（設定金額とAPIキーは残ります。この操作は元に戻せません）")) {
-                roster = []; historyLog = []; scanData = [];
-                await localforage.setItem('receiptRosterData', roster);
-                await localforage.setItem('receiptHistoryLog', historyLog);
-                await localforage.setItem('receiptScanData', scanData);
-                renderRosterTable();
-                alert("データを初期化しました。");
-            }
-        });
-
-        // --- 画像アップロード ---
-        document.getElementById('camera-btn').addEventListener('click', () => {
-            const input = document.getElementById('image-input');
-            input.setAttribute('capture', 'environment'); input.click();
-        });
-        document.getElementById('file-btn').addEventListener('click', () => {
-            const input = document.getElementById('image-input');
-            input.removeAttribute('capture'); input.click();
-        });
-
-        document.getElementById('image-input').addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            showLoading('画像を準備中...');
-            try {
-                currentImageBase64 = await compressImage(file, 1200);
-                document.getElementById('preview-img').src = currentImageBase64;
-                document.getElementById('action-buttons-container').classList.add('hidden');
-                document.getElementById('summary-section').classList.add('hidden');
-                document.getElementById('preview-area').classList.remove('hidden');
-            } catch (err) { showError("画像エラー"); resetScanFlow(); } finally { hideLoading(); }
-        });
+        // OCR キャンセルボタンのバインド
         document.getElementById('cancel-scan-btn').addEventListener('click', resetScanFlow);
         document.getElementById('cancel-save-btn').addEventListener('click', resetScanFlow);
 
-        function compressImage(file, maxSize) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        let w = img.width, h = img.height;
-                        if (w > h && w > maxSize) { h *= maxSize / w; w = maxSize; }
-                        else if (h > maxSize) { w *= maxSize / h; h = maxSize; }
-                        const cvs = document.createElement('canvas');
-                        cvs.width = w; cvs.height = h;
-                        cvs.getContext('2d').drawImage(img, 0, 0, w, h);
-                        resolve(cvs.toDataURL('image/jpeg', 0.8));
-                    };
-                    img.onerror = reject; img.src = e.target.result;
-                };
-                reader.onerror = reject; reader.readAsDataURL(file);
-            });
-        }
-
-        // --- Google Vision API ---
+        // --- Google Vision API (OCR) ---
         document.getElementById('scan-btn').addEventListener('click', async () => {
             if (!apiKey) { alert("APIキーを設定してください"); return showSetupArea(); }
             showLoading('OCR解析中...');
@@ -1194,79 +1149,17 @@
                     imageBase64: currentImageBase64, rawText: document.getElementById('raw-text').value
                 });
 
-                await localforage.setItem('receiptRosterData', roster);
-                await localforage.setItem('receiptHistoryLog', historyLog);
-                await localforage.setItem('receiptScanData', scanData);
+                try {
+                    await localforage.setItem('receiptRosterData', roster);
+                    await localforage.setItem('receiptHistoryLog', historyLog);
+                    await localforage.setItem('receiptScanData', scanData);
+                } catch(e) {}
                 renderRosterTable();
             }
             resetScanFlow();
         });
 
-        function getStatusColorClass(status) {
-            if (status === "済") return "text-green-600 font-bold";
-            return "text-red-600 font-bold";
-        }
-
         // --- 手動編集・変更確認機能 ---
-        window.openEditModal = function(id, fromBarcode = false) {
-            const person = roster.find(r => String(r.ID) === String(id));
-            if(!person) return;
-            
-            isModalOpen = true; 
-
-            document.getElementById('edit-id').value = person.ID;
-            document.getElementById('edit-name').value = person["氏名"];
-            
-            const oldStatus = person["支払状況"] || "未";
-            const oldAmount = parseInt(person["金額"]) || 0;
-            document.getElementById('edit-modal').dataset.oldStatus = oldStatus;
-            document.getElementById('edit-modal').dataset.oldAmount = oldAmount;
-
-            let targetStatus = oldStatus;
-            let targetAmount = oldAmount;
-
-            if (fromBarcode) {
-                targetStatus = "済";
-                targetAmount = presetAmounts.length > 0 ? presetAmounts[0] : 0;
-            } else {
-                targetStatus = oldStatus === "済" ? "済" : ""; 
-            }
-
-            document.getElementById('edit-status').value = targetStatus === "済" ? "済" : "";
-            document.getElementById('edit-amount').value = targetAmount || "";
-
-            updateDiffFromInputs();
-
-            document.getElementById('diff-display').classList.remove('hidden');
-            document.getElementById('edit-modal').classList.remove('hidden');
-        };
-
-        window.updateDiffFromInputs = function() {
-            const oldStatus = document.getElementById('edit-modal').dataset.oldStatus || "未";
-            const oldAmount = parseInt(document.getElementById('edit-modal').dataset.oldAmount) || 0;
-            
-            const newStatusVal = document.getElementById('edit-status').value;
-            const newStatus = newStatusVal === "済" ? "済" : "未";
-            const newAmount = parseInt(document.getElementById('edit-amount').value) || 0;
-
-            const oldStatSpan = document.getElementById('diff-status-old');
-            const newStatSpan = document.getElementById('diff-status-new');
-            oldStatSpan.textContent = oldStatus;
-            oldStatSpan.className = getStatusColorClass(oldStatus);
-            newStatSpan.textContent = newStatus;
-            newStatSpan.className = getStatusColorClass(newStatus);
-
-            document.getElementById('diff-amount-old').textContent = `${oldAmount.toLocaleString()}円`;
-            const newAmtSpan = document.getElementById('diff-amount-new');
-            newAmtSpan.textContent = `${newAmount.toLocaleString()}円`;
-            
-            if(oldAmount !== newAmount && newStatus === "済") {
-                newAmtSpan.classList.add('text-blue-600');
-            } else {
-                newAmtSpan.classList.remove('text-blue-600');
-            }
-        };
-
         window.saveEdit = async function() {
             const id = document.getElementById('edit-id').value;
             const newName = document.getElementById('edit-name').value.trim();
@@ -1289,8 +1182,10 @@
                     "変更前状況": oldStatus, "変更後状況": person["支払状況"] || "未", "変更前金額": oldAmount, "変更後金額": person["金額"] || 0
                 });
                 
-                await localforage.setItem('receiptRosterData', roster);
-                await localforage.setItem('receiptHistoryLog', historyLog);
+                try {
+                    await localforage.setItem('receiptRosterData', roster);
+                    await localforage.setItem('receiptHistoryLog', historyLog);
+                } catch(e) {}
                 renderRosterTable();
             }
             await closeModal('edit-modal');
@@ -1308,8 +1203,10 @@
                     "変更前状況": "", "変更後状況": "削除", "変更前金額": "", "変更後金額": ""
                 });
 
-                await localforage.setItem('receiptRosterData', roster);
-                await localforage.setItem('receiptHistoryLog', historyLog);
+                try {
+                    await localforage.setItem('receiptRosterData', roster);
+                    await localforage.setItem('receiptHistoryLog', historyLog);
+                } catch(e) {}
                 renderRosterTable();
                 await closeModal('edit-modal');
             }
@@ -1324,7 +1221,8 @@
 
         function renderRosterTable() {
             ['id', 'kumi', 'status'].forEach(k => {
-                document.getElementById(`sort-icon-${k}`).textContent = (sortKey === k) ? (sortDesc ? '▼' : '▲') : '';
+                const icon = document.getElementById(`sort-icon-${k}`);
+                if (icon) icon.textContent = (sortKey === k) ? (sortDesc ? '▼' : '▲') : '';
             });
 
             let filteredData = roster.filter(r => {
@@ -1507,6 +1405,29 @@
             }
         });
 
+        // --- OCRボタンと画像入力のバインド ---
+        document.getElementById('camera-btn').addEventListener('click', () => {
+            const input = document.getElementById('image-input');
+            input.setAttribute('capture', 'environment'); input.click();
+        });
+        document.getElementById('file-btn').addEventListener('click', () => {
+            const input = document.getElementById('image-input');
+            input.removeAttribute('capture'); input.click();
+        });
+
+        document.getElementById('image-input').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            showLoading('画像を準備中...');
+            try {
+                currentImageBase64 = await compressImage(file, 1200);
+                document.getElementById('preview-img').src = currentImageBase64;
+                document.getElementById('action-buttons-container').classList.add('hidden');
+                document.getElementById('summary-section').classList.add('hidden');
+                document.getElementById('preview-area').classList.remove('hidden');
+            } catch (err) { showError("画像エラー"); resetScanFlow(); } finally { hideLoading(); }
+        });
+
         // --- Excel + 写真 一括ZIP出力 ---
         document.getElementById('export-data-btn').addEventListener('click', async () => {
             if (roster.length === 0) return showError("出力するデータがありません。");
@@ -1565,19 +1486,23 @@
         }
         
         function playBeepSound() {
-            const context = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = context.createOscillator();
-            const gainNode = context.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(context.destination);
-            
-            oscillator.type = 'sine';
-            oscillator.frequency.value = 3000; 
-            gainNode.gain.value = 1; 
-            
-            oscillator.start();
-            oscillator.stop(context.currentTime + 0.1);
+            try {
+                const context = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = context.createOscillator();
+                const gainNode = context.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(context.destination);
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.value = 3000; 
+                gainNode.gain.value = 1; 
+                
+                oscillator.start();
+                oscillator.stop(context.currentTime + 0.1);
+            } catch(e) {
+                console.warn("ビープ音の再生に失敗:", e);
+            }
         }
     </script>
 </body>
