@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>レシート集計リーダー (多機能版) ｖ10</title>
+    <title>レシート集計リーダー (多機能版) ｖ10.1</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- localForage (内部ストレージ) -->
@@ -60,14 +60,14 @@
         
         /* オーバーレイの影を薄く調整 (0.45 -> 0.2) */
         .scan-overlay {
-            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.05);
         }
     </style>
 </head>
 <body class="bg-gray-100 text-gray-800 pb-20">
 
     <header class="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-10 flex justify-between items-center">
-        <h1 class="text-xl font-bold">📊 集計 (V10 高確度・堅牢版)</h1>
+        <h1 class="text-xl font-bold">📊 集計 (V10.1)</h1>
         <button id="nav-settings-btn" class="p-2 rounded hover:bg-blue-800 text-sm font-bold">⚙️ 設定/名簿</button>
     </header>
 
@@ -558,11 +558,11 @@
                     await html5QrCode.start(
                         c,
                         { 
-                            fps: 15, 
+                            fps: 12, 
+//QRBOX設定
                             qrbox: { width: qrboxWidth, height: qrboxHeight },
                             formatsToSupport: [
-                                Html5QrcodeSupportedFormats.CODE_39,
-                                Html5QrcodeSupportedFormats.QR_CODE
+                                Html5QrcodeSupportedFormats.CODE_39
                             ]
                         },
                         async (decodedText) => {
